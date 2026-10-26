@@ -95,7 +95,7 @@ repositories:
       recent:
         query:
           sql: "SELECT * FROM events WHERE user_id = :uid ORDER BY at DESC LIMIT 50"
-          params: { uid: "$principal.id" }
+          params: { uid: "$principal.sub" }
 ```
 
 Bindings (`$principal.*`, route params, `$body.*`) are resolved at request time and passed as bound parameters. Mixing the forms (a SQL query on a MongoDB datastore, or a Mongo command on a relational one) is a validation error (`QUERY_FORM_MISMATCH`).

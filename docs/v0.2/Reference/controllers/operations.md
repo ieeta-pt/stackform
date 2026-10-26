@@ -147,9 +147,8 @@ silently makes every operation public.
 
 > **Watch out**
 >
-> Routes are only actually protected once at least one `type: auth` entity
-> exists in the spec. With no auth entity in the spec, even non-`public` routes
-> stay open.
+> A non-`public` route needs a `type: auth` entity to authenticate against.
+> With no auth entity in the spec, such a route answers every request with 401.
 
 ## Auth operations are off by default
 

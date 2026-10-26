@@ -4,6 +4,8 @@
     "api",
     "datastores",
     "mongo",
-    "environment-variables"
+    "environment-variables",
+    "session",
+    "deploy"
   ]
 }

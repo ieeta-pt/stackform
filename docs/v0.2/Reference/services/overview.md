@@ -83,7 +83,7 @@ The controller route is required for custom (non-CRUD) operations; without `meth
 
 ```yaml
 imports:
-  handlers: my-app.handlers
+  handlers: my_app.handlers
 
 services:
   myCollection:
@@ -96,7 +96,7 @@ controllers:
     service: myCollection
     base_path: /my-collection
     operations:
-      publish: { method: POST, path: /{id}/publish }
+      publish: { method: POST, path: "/{id}/publish" }
 ```
 
 With `api: { basePath: /api, version: v1 }` this exposes `POST /api/v1/my-collection/{id}/publish`.
@@ -119,7 +119,7 @@ The handler does its own data access and owns its response; an uncaught exceptio
 
 ## Top-level `handler` vs per-operation `handler`
 
-- A top-level `handler` on a service replaces the whole service group with one custom function (no CRUD units are generated for it).
+- A top-level `handler` on a service replaces the whole service group with one custom function (no CRUD units are generated for it). It cannot be combined with `operation`.
 - `operations.<op>.handler` adds a single custom operation alongside the repository-backed CRUD operations.
 
 ```yaml
@@ -132,13 +132,42 @@ services:
       publish: { handler: handlers.publish }  # one extra operation
 ```
 
+## Inheritance with `abstract` and `extends`
+
+An `abstract: true` service is a template: no controller may reference it. A service with `extends: <name>` inherits every key of that abstract service except `abstract` and `extends`; its own keys win and `operations` merge per operation.
+
+```yaml
+services:
+  publishable:
+    abstract: true
+    operations:
+      publish: { handler: handlers.publish }
+  articles:
+    repository: articles
+    extends: publishable
+  pages:
+    repository: pages
+    extends: publishable
+    operations:
+      delete: false
+```
+
+When the abstract service declares `operations`, the generated backend emits it as a base class that every extending service subclasses.
+
+| Code | Cause |
+|------|-------|
+| `SERVICE_EXTENDS_NOT_FOUND` | `extends` names a service that does not exist. |
+| `SERVICE_EXTENDS_NOT_ABSTRACT` | `extends` names a service without `abstract: true`. |
+| `SERVICE_CIRCULAR_EXTENDS` | An `extends` chain loops back on itself. |
+| `DESUGAR_ABSTRACT_SERVICE_BOUND` | A controller references an abstract service. |
+
 ## Imports
 
 `handler:` values are dotted references of the form `importKey.functionName`. The leading key is looked up in the top-level `imports:` map and the rest is appended; if the key is not declared, the value is treated as a verbatim dotted module path.
 
 ```yaml
 imports:
-  handlers: my-app.handlers            # handlers.publish -> my-app.handlers.publish
+  handlers: my_app.handlers            # handlers.publish -> my_app.handlers.publish
 ```
 
 Declaring the alias in `imports:` keeps handler references short and is recommended, but is not strictly required.
@@ -183,7 +212,7 @@ api:
       login: true
 
 imports:
-  handlers: my-app.handlers
+  handlers: my_app.handlers
 
 services:
   users: {}                              # all CRUD + register/login (auth entity)

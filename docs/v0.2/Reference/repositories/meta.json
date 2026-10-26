@@ -3,6 +3,7 @@
   "pages": [
     "overview",
     "composable-crud",
+    "lifecycle",
     "operations"
   ]
 }

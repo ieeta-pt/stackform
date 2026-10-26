@@ -46,16 +46,37 @@ Common codes:
   and tabs (use spaces).
 - `YAML_ROOT_INVALID` -- the document parsed but the top level is not a mapping.
 - `SCHEMA_VALIDATION_ERROR` -- valid YAML, but the structure does not match the schema.
-  Fix the field name or type at the `path` shown.
+  Fix the field name or type at the `path` shown. This includes an unknown key (see the
+  [grammar reference](./Reference/grammar.md)) and a `crud` value outside `list`, `get`,
+  `create`, `update`, `replace`, `delete`.
 - `ID_FIELD_MISSING` / `ID_FIELD_MULTIPLE` -- an entity must declare exactly one
   `type: id` field (or a natural `pk:`). Zero or two `id` fields are rejected.
-- `CRUD_OPERATION_INVALID` -- a `repositories.<name>.crud` list contains a value that is
-  not one of `list`, `get`, `create`, `update`, `replace`, `delete`.
 - `OPERATION_MISSING_QUERY_OR_HANDLER` -- a custom `repositories.<name>.operations.<op>`
   declares neither a `query:` nor a `handler:`.
-- `QUERY_COMMAND_UNKNOWN` / `QUERY_MISSING_COLLECTION` -- a query op uses an unknown
-  command or targets no collection (the repository has no entity and no
-  `query.collection`).
+- `QUERY_COMMAND_UNKNOWN` / `QUERY_MISSING_FIELD` / `QUERY_MISSING_COLLECTION` /
+  `QUERY_COLLECTION_NOT_FOUND` -- a query op uses an unknown command, lacks a field its
+  command needs, targets no collection (the repository has no entity and no
+  `query.collection`), or names a `query.collection` that is not a declared repository.
+- `QUERY_FORM_MISMATCH` / `QUERY_SQL_INVALID` -- a `sql` query on a MongoDB repository or
+  a `command` query on a PostgreSQL one, or an empty `sql`.
+- `LIFECYCLE_FIELD_NOT_FOUND` / `LIFECYCLE_FIELD_NOT_DATETIME` -- `softDelete` or
+  `ttl.field` names a field the entity lacks or one that is not `type: datetime`. See
+  [Lifecycle](./Reference/repositories/lifecycle.md).
+- `REPOSITORY_EXTENDS_NOT_FOUND` / `REPOSITORY_EXTENDS_NOT_ABSTRACT` /
+  `REPOSITORY_CIRCULAR_EXTENDS` and the `SERVICE_` equivalents -- `extends` names an
+  undeclared entry or one without `abstract: true`, or the chain loops back on itself.
+- `DESUGAR_ABSTRACT_REPOSITORY_BOUND` / `DESUGAR_ABSTRACT_SERVICE_BOUND` -- a service or
+  controller binds an abstract repository or service; bind a concrete one that extends it.
+- `DESUGAR_SERVICE_NOT_FOUND` -- a controller or route references an undefined service.
+- `REPOSITORY_OPERATION_UNDECLARED` -- a route calls an operation that no handler
+  implements and the repository does not provide. Declare it under the repository's
+  `operations`, list it in `crud`, or give the service a handler.
+- `PAGINATION_UNSUPPORTED` -- `pagination` on a route whose operation is not a repository
+  `list`.
+- `SESSION_ALGORITHM_UNUSED` -- `session.algorithm: RS256` on a spec that never mints a
+  session token. See [`session:`](./Reference/configuration/session.md).
+- `BACKEND_FEATURE_UNSUPPORTED` -- the chosen backend lacks a feature the spec uses, such
+  as `session.refresh` or `delivery: cookie` on DRF or raw ASGI.
 - `ACCESS_AMBIGUOUS_ROLE` / `ACCESS_NO_AUTH_ENTITY` / `ACCESS_UNKNOWN_ENTITY` -- an access
   rule names a role that matches more than one identity entity, references roles when no
   `type: auth` entity exists, or names an entity that does not exist.

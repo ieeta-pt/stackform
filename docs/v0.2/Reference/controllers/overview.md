@@ -50,7 +50,7 @@ With `api: { basePath: /api, version: v1 }` and `base_path: /my-collection`, the
 
 Type: access value (see [access-control](./access-control.md)). Optional. Default: `public`.
 
-Default access rule applied to every operation. Individual operations override it with their own `access`. If you omit `access` on a minified controller, every operation defaults to `public`, so an entity is only protected once you set a non-public value. Protection is wired only when an identity entity (a `type: auth` entity) exists; with no auth entity in the spec, even non-public routes stay open.
+Default access rule applied to every operation. Individual operations override it with their own `access`. If you omit `access` on a minified controller, every operation defaults to `public`, so an entity is only protected once you set a non-public value. A non-public route needs a `type: auth` entity to authenticate against; without one it answers every request with 401.
 
 > **Enforcement**
 >

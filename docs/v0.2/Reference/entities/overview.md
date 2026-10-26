@@ -18,8 +18,8 @@ entities:
     pk: fieldName            # optional, natural primary key
     auth:                    # required with type: auth
       identifier: fieldName
-      via:                   # password, apiKey, or binding objects for OIDC/SAML providers
-        - password
+      via:                   # a provider name, a list of names, or a list of binding objects
+        - provider: password
         - provider: providerName
           identifier: fieldName
       roles: enumFieldName   # optional, names an enum field that holds the role

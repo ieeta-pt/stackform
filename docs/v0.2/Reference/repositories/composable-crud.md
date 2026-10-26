@@ -126,7 +126,7 @@ The remaining operations behave normally: `POST /api/v1/my-collection`,
 
 | Code | Cause |
 |------|-------|
-| `CRUD_OPERATION_INVALID` | A `crud:` entry is not one of `list`, `get`, `create`, `update`, `replace`, `delete`. |
+| `SCHEMA_VALIDATION_ERROR` | A `crud:` entry is not one of `list`, `get`, `create`, `update`, `replace`, `delete`. |
 | `CRUD_WITHOUT_ENTITY` | A repository declares `crud:` but no `entity:`. |
 | `REPOSITORY_EMPTY` | A repository has neither an `entity:` nor any custom `operations:`. |
 

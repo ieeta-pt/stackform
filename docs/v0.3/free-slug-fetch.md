@@ -1,18 +1,13 @@
 ---
 title: Freely-named single-record tokens
-description: Fetch a built-in single-record op by a route-derived token predicate instead of the hardwired `{id}`.
+description: Locate the record of a built-in single-record operation from freely named route tokens.
 ---
 
-## The `{id}` assumption, lifted
+## Naming the record token
 
 The built-in single-record operations &mdash; `get`, `update`, `replace`,
-`delete` &mdash; used to hardwire the path token `{id}` and load the record by a
-route parameter literally named `id`. Renaming the token silently broke the
-fetch: the record never loaded and any ownership / `when:` check evaluated
-against nothing.
-
-Under v0.3 a single-record op derives its fetch from the **route template**
-instead. A route may name its token freely:
+`delete` &mdash; locate their record from the **route template**, so a route
+may name its token freely:
 
 ```yaml
 controllers:

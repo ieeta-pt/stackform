@@ -130,4 +130,4 @@ downloads.
 
 - [File datastores](file-datastores.md)
 - [File fields](file-fields.md)
-- [Access and binding grammar reference](grammar-reference.md)
+- [Grammar reference](grammar-reference.md)

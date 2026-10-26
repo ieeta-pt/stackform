@@ -1,13 +1,335 @@
 ---
-title: Access and binding grammar reference
-description: Complete v0.3 reference for access values, given bindings, route slugs, where predicates, service inputs, forwarding, and rule bindings.
+title: Grammar reference
+description: Every key a v0.3 spec accepts, and the access and binding grammar inside them.
 ---
 
-This page collects the access and binding forms accepted by a v0.3 spec. The
-JSON schema validates their outer shape; the parsers and semantic validators
-enforce the grammar, declared names, symbol scopes, and wiring rules described
-below. The live server and generated FastAPI, Django REST Framework, and raw-ASGI
-backends implement the same behavior.
+This page lists every key a v0.3 spec accepts, then the access and binding
+forms used inside those keys. The JSON schema validates the keys and their
+shape; the parsers and semantic validators enforce the grammar, declared names,
+symbol scopes, and wiring rules described below. The live server and generated
+FastAPI, Django REST Framework, and raw-ASGI backends implement the same
+behavior.
+
+## Spec keys
+
+Every key a `version: "0.3"` spec accepts. `<name>` stands for a name you
+choose. A key outside these tables, or a value of the wrong type, fails schema
+validation with `SCHEMA_VALIDATION_ERROR`. Keys v0.3 shares with v0.2 behave as
+the v0.2 reference describes.
+
+### Version
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `version` | `"0.3"` | [Spec version 0.3](spec-version.md) |
+
+### API
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `api` | object | [api](../v0.2/Reference/configuration/api.md) |
+| `api.basePath` | string | [api](../v0.2/Reference/configuration/api.md) |
+| `api.version` | string | [api](../v0.2/Reference/configuration/api.md) |
+| `api.port` | integer, 1 to 65535 | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations` | object | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults` | object | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.list` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.get` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.create` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.update` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.replace` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.defaults.delete` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.auth` | object | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.auth.register` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.operations.auth.login` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.cors` | object | [api](../v0.2/Reference/configuration/api.md) |
+| `api.cors.origins` | list of strings | [api](../v0.2/Reference/configuration/api.md) |
+| `api.cors.methods` | list of strings | [api](../v0.2/Reference/configuration/api.md) |
+| `api.cors.headers` | list of strings | [api](../v0.2/Reference/configuration/api.md) |
+| `api.cors.credentials` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.securityHeaders` | boolean | [api](../v0.2/Reference/configuration/api.md) |
+| `api.files` | object | [File fields](file-fields.md#limits-and-precedence) |
+| `api.files.maxSize` | integer or size string | [File fields](file-fields.md#limits-and-precedence) |
+| `api.files.types` | list of MIME types | [File fields](file-fields.md#limits-and-precedence) |
+| `api.files.maxFiles` | integer | [File fields](file-fields.md#limits-and-precedence) |
+
+### Imports
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `imports` | map | [Vendored imports](vendored-imports.md) |
+| `imports.<name>.path` | string | [Vendored imports](vendored-imports.md) |
+| `imports.<name>.package` | Python identifier | [Vendored imports](vendored-imports.md) |
+| `imports.<name>.requires` | list of strings | [Vendored imports](vendored-imports.md#dependency-merging) |
+
+### MongoDB
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `mongo` | object | [mongo](../v0.2/Reference/configuration/mongo.md) |
+| `mongo.uri` | string | [mongo](../v0.2/Reference/configuration/mongo.md) |
+| `mongo.database` | string | [mongo](../v0.2/Reference/configuration/mongo.md) |
+
+### Datastores
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `datastores` | map | [datastores](../v0.2/Reference/configuration/datastores.md) |
+| `datastores.<name>.type` | `mongodb` \| `mongo` \| `postgres` \| `postgresql` \| `filesystem` \| `s3` | [datastores](../v0.2/Reference/configuration/datastores.md), [File datastores](file-datastores.md) |
+| `datastores.<name>.default` | boolean | [datastores](../v0.2/Reference/configuration/datastores.md) |
+| `datastores.<name>.uri` | string | [datastores](../v0.2/Reference/configuration/datastores.md) |
+| `datastores.<name>.database` | string | [datastores](../v0.2/Reference/configuration/datastores.md) |
+| `datastores.<name>.dsn` | string | [datastores](../v0.2/Reference/configuration/datastores.md) |
+| `datastores.<name>.path` | string | [File datastores](file-datastores.md#type-filesystem) |
+| `datastores.<name>.bucket` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.endpoint` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.region` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.accessKey` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.secretKey` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.prefix` | string | [File datastores](file-datastores.md#type-s3) |
+| `datastores.<name>.files` | object, file datastores only | [File fields](file-fields.md#limits-and-precedence) |
+| `datastores.<name>.files.maxSize` | integer or size string | [File fields](file-fields.md#limits-and-precedence) |
+| `datastores.<name>.files.types` | list of MIME types | [File fields](file-fields.md#limits-and-precedence) |
+
+### Entities
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `entities` | map | [entities](../v0.2/Reference/entities/overview.md) |
+| `entities.<name>.type` | `base` \| `auth` | [entities](../v0.2/Reference/entities/overview.md) |
+| `entities.<name>.extends` | string | [inheritance](../v0.2/Reference/entities/inheritance.md) |
+| `entities.<name>.abstract` | boolean | [inheritance](../v0.2/Reference/entities/inheritance.md) |
+| `entities.<name>.pk` | string | [primary keys](../v0.2/Reference/entities/primary-keys.md) |
+| `entities.<name>.fields` | map of [fields](#field-keys) | [field types](../v0.2/Reference/entities/field-types.md) |
+| `entities.<name>.auth` | object, `type: auth` only | [auth](../v0.2/Reference/auth/overview.md) |
+| `entities.<name>.auth.identifier` | string | [auth](../v0.2/Reference/auth/overview.md) |
+| `entities.<name>.auth.roles` | string | [auth](../v0.2/Reference/auth/overview.md) |
+| `entities.<name>.auth.via` | string, list of strings, or list of objects | [login and SSO](../v0.2/Reference/auth/login-and-sso.md) |
+| `entities.<name>.auth.via[].provider` | string | [login and SSO](../v0.2/Reference/auth/login-and-sso.md) |
+| `entities.<name>.auth.via[].identifier` | string | [login and SSO](../v0.2/Reference/auth/login-and-sso.md) |
+| `entities.<name>.auth.via[].claim_mapping` | map of strings | [claim mapping](../v0.2/Reference/auth/claim-mapping.md) |
+| `entities.<name>.auth.via[].auto_provision` | boolean | [login and SSO](../v0.2/Reference/auth/login-and-sso.md) |
+| `entities.<name>.auth.via[].relations` | map | [claim mapping](../v0.2/Reference/auth/claim-mapping.md) |
+| `entities.<name>.auth.via[].relations.<name>.collection` | string | [claim mapping](../v0.2/Reference/auth/claim-mapping.md) |
+| `entities.<name>.auth.via[].relations.<name>.match` | map of strings | [claim mapping](../v0.2/Reference/auth/claim-mapping.md) |
+| `entities.<name>.roles` | object, `type: auth` only | [roles](../v0.2/Reference/roles/overview.md) |
+| `entities.<name>.roles.values` | list of strings | [roles](../v0.2/Reference/roles/overview.md) |
+| `entities.<name>.roles.default` | string | [roles](../v0.2/Reference/roles/overview.md) |
+| `entities.<name>.roles.hierarchy` | map of role lists | [role hierarchy](../v0.2/Reference/roles/hierarchy.md) |
+
+### Field keys
+
+An entity field (`entities.<name>.fields.<name>`), a DTO field
+(`dto.<name>.fields.<name>`), a service input field
+(`services.<name>.input.<name>`) and a nested field (`items`, or
+`properties.<name>`) each take `type` and the keys of that type.
+
+| Key | Accepted on | Type | Reference |
+| --- | --- | --- | --- |
+| `type` | every field | `string` \| `number` \| `boolean` \| `datetime` \| `enum` \| `array` \| `object` \| `ref` \| `id` \| `file` | [field types](../v0.2/Reference/entities/field-types.md), [File fields](file-fields.md) |
+| `required` | every field | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `readonly` | every field | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `default` | every type except `file` | a value of the field's type | [field types](../v0.2/Reference/entities/field-types.md) |
+| `unique` | top-level entity fields, every type except `file` | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `minLength` | `string` | integer | [field types](../v0.2/Reference/entities/field-types.md) |
+| `maxLength` | `string` | integer | [field types](../v0.2/Reference/entities/field-types.md) |
+| `format` | `string` | `email` \| `e164` \| `uri` \| `uuidv7` \| `uuidv4` | [field types](../v0.2/Reference/entities/field-types.md) |
+| `format` | `id` | `uuidv7` \| `uuidv4` | [primary keys](../v0.2/Reference/entities/primary-keys.md) |
+| `min` | `number` | number | [field types](../v0.2/Reference/entities/field-types.md) |
+| `max` | `number` | number | [field types](../v0.2/Reference/entities/field-types.md) |
+| `values` | `enum`, required | list of strings | [field types](../v0.2/Reference/entities/field-types.md) |
+| `items` | `array`, required | nested field | [field types](../v0.2/Reference/entities/field-types.md) |
+| `maxItems` | `array` of `file` items | integer | [File fields](file-fields.md#arrays-of-files) |
+| `properties` | `object` | map of nested fields | [field types](../v0.2/Reference/entities/field-types.md) |
+| `additionalProperties` | `object` | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `ref` | `ref`, required | entity name | [field types](../v0.2/Reference/entities/field-types.md) |
+| `maxSize` | `file` | integer or size string | [File fields](file-fields.md#options) |
+| `types` | `file` | list of MIME types | [File fields](file-fields.md#options) |
+| `disposition` | `file` | `attachment` \| `inline` | [File fields](file-fields.md#disposition) |
+
+`type: id` is accepted on a top-level entity field only. A `file` field, or an
+array of `file` items, is accepted on a top-level entity field only; see
+[where file fields are allowed](file-fields.md#where-file-fields-are-allowed).
+
+### Repositories
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `repositories` | map | [repositories](../v0.2/Reference/repositories/overview.md) |
+| `repositories.<name>.entity` | string | [repositories](../v0.2/Reference/repositories/overview.md) |
+| `repositories.<name>.datastore` | string | [repositories](../v0.2/Reference/repositories/overview.md) |
+| `repositories.<name>.files` | string | [File datastores](file-datastores.md#binding-a-repository) |
+| `repositories.<name>.abstract` | boolean | [repositories](../v0.2/Reference/repositories/overview.md) |
+| `repositories.<name>.extends` | string | [repositories](../v0.2/Reference/repositories/overview.md) |
+| `repositories.<name>.crud` | list of `list` \| `get` \| `create` \| `update` \| `replace` \| `delete` | [composable CRUD](../v0.2/Reference/repositories/composable-crud.md) |
+| `repositories.<name>.softDelete` | string | [lifecycle](../v0.2/Reference/repositories/lifecycle.md) |
+| `repositories.<name>.ttl` | object | [lifecycle](../v0.2/Reference/repositories/lifecycle.md) |
+| `repositories.<name>.ttl.field` | string | [lifecycle](../v0.2/Reference/repositories/lifecycle.md) |
+| `repositories.<name>.ttl.seconds` | integer | [lifecycle](../v0.2/Reference/repositories/lifecycle.md) |
+| `repositories.<name>.operations` | map | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.handler` | string | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.includeDeleted` | boolean, with `query` only | [lifecycle](../v0.2/Reference/repositories/lifecycle.md#includedeleted) |
+| `repositories.<name>.operations.<name>.query` | object | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.command` | string | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.collection` | string | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.key` | string | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.sql` | string | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.params` | map | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.filter` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.pipeline` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.document` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.documents` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.update` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.replacement` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+| `repositories.<name>.operations.<name>.query.requests` | any | [operations](../v0.2/Reference/repositories/operations.md#custom-operations) |
+
+### Services
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `services` | map | [services](../v0.2/Reference/services/overview.md) |
+| `services.<name>.repository` | string | [services](../v0.2/Reference/services/overview.md) |
+| `services.<name>.operation` | string | [services](../v0.2/Reference/services/overview.md) |
+| `services.<name>.handler` | string | [Service `input:`](service-input.md) |
+| `services.<name>.abstract` | boolean | [services](../v0.2/Reference/services/overview.md#inheritance-with-abstract-and-extends) |
+| `services.<name>.extends` | string | [services](../v0.2/Reference/services/overview.md#inheritance-with-abstract-and-extends) |
+| `services.<name>.operations` | map of booleans or objects | [services](../v0.2/Reference/services/overview.md#per-operation-overrides) |
+| `services.<name>.operations.<name>.handler` | string | [services](../v0.2/Reference/services/overview.md#per-operation-overrides) |
+| `services.<name>.input` | map of [fields](#field-keys) or type names, or list of DTO names | [Service `input:`](service-input.md) |
+| `services.<name>.with` | map of `$` references or scalars | [Service `input:`](service-input.md#forwarding-values) |
+
+### Controllers
+
+`<access>` stands for `controllers.<name>`, `controllers.<name>.operations.<name>`
+or `controllers.<name>.routes.<name>`, and `<pagination>` for
+`controllers.<name>.operations.<name>` or `controllers.<name>.routes.<name>`.
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `controllers` | map | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.service` | string | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.base_path` | string | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.operations` | map of booleans or objects | [operations](../v0.2/Reference/controllers/operations.md) |
+| `controllers.<name>.operations.<name>.method` | `GET` \| `POST` \| `PUT` \| `PATCH` \| `DELETE` | [operations](../v0.2/Reference/controllers/operations.md) |
+| `controllers.<name>.operations.<name>.path` | string | [operations](../v0.2/Reference/controllers/operations.md) |
+| `controllers.<name>.routes` | map | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.routes.<name>.service` | string, without controller `service` only | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.routes.<name>.method` | `GET` \| `POST` \| `PUT` \| `PATCH` \| `DELETE`, without controller `service` only | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `controllers.<name>.routes.<name>.path` | string, without controller `service` only | [controllers](../v0.2/Reference/controllers/overview.md) |
+| `<access>.access` | [access value](#access-values) | [Access values](#access-values) |
+| `<access>.access[].given` | map of [bindings](#given-bindings) | [`given:` bindings](#given-bindings) |
+| `<access>.access[].when` | string or list of strings | [When expressions](../v0.2/Reference/when-expressions/overview.md) |
+| `<access>.access[].then` | `allow` \| `deny` | [Access-rule objects](#access-rule-objects) |
+| `<access>.access[].reason` | string | [Explainable access denials](access-reason.md) |
+| `<access>.access[].bind` | map of `$` references or scalars | [Access-rule `bind:`](controller-bind.md) |
+| `<pagination>.pagination` | object, list routes only | [Pagination](pagination.md) |
+| `<pagination>.pagination.strategy` | `offset` \| `keyset` | [Pagination](pagination.md#strategies) |
+| `<pagination>.pagination.size` | object | [Pagination](pagination.md) |
+| `<pagination>.pagination.size.default` | integer | [Pagination](pagination.md) |
+| `<pagination>.pagination.size.max` | integer | [Pagination](pagination.md) |
+| `<pagination>.pagination.count` | `none` \| `exact` | [Pagination](pagination.md#envelopes) |
+| `<pagination>.pagination.onOverflow` | `clamp` \| `reject` | [Pagination](pagination.md) |
+| `<pagination>.pagination.envelope` | boolean | [Pagination](pagination.md#envelopes) |
+| `<pagination>.pagination.sort` | list of objects | [Pagination](pagination.md) |
+| `<pagination>.pagination.sort[].field` | string | [Pagination](pagination.md) |
+| `<pagination>.pagination.sort[].dir` | `asc` \| `desc` | [Pagination](pagination.md) |
+
+### Providers
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `providers` | map | [providers](../v0.2/Reference/providers/overview.md) |
+| `providers.<name>.type` | `oidc` \| `saml` | [providers](../v0.2/Reference/providers/overview.md) |
+| `providers.<name>.trust` | `app` \| `idp`, OIDC only | [Dual-trust token dispatch](trust-dispatch.md) |
+| `providers.<name>.client_id` | string, OIDC only | [OIDC](../v0.2/Reference/providers/oidc.md) |
+| `providers.<name>.discovery_url` | string, OIDC only | [OIDC](../v0.2/Reference/providers/oidc.md) |
+| `providers.<name>.client_secret` | string, OIDC `trust: app` only | [OIDC](../v0.2/Reference/providers/oidc.md) |
+| `providers.<name>.pkce` | boolean, OIDC `trust: app` only | [PKCE](pkce.md) |
+| `providers.<name>.dpop` | boolean, OIDC `trust: app` only | [DPoP](dpop.md) |
+| `providers.<name>.issuer` | string, OIDC `trust: idp` only | [IdP token verification](verify-idp.md) |
+| `providers.<name>.audiences` | list of strings, OIDC `trust: idp` only | [IdP token verification](verify-idp.md) |
+| `providers.<name>.idp_metadata_url` | string, SAML only | [SAML](../v0.2/Reference/providers/saml.md) |
+| `providers.<name>.sp_entity_id` | string, SAML only | [SAML](../v0.2/Reference/providers/saml.md) |
+
+### Session
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `session` | object | [session](../v0.2/Reference/configuration/session.md) |
+| `session.algorithm` | `HS256` \| `RS256` | [RS256 session tokens](rs256-signing.md) |
+| `session.ttl` | integer | [session](../v0.2/Reference/configuration/session.md) |
+| `session.refresh` | boolean | [Refresh-token rotation](refresh-tokens.md) |
+| `session.delivery` | `token-url` \| `cookie` | [Cookie (BFF) session delivery](cookie-bff.md) |
+
+### DTOs
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `dto` | map | [DTOs](../v0.2/Reference/dto/overview.md) |
+| `dto.<name>.fields` | map of [fields](#field-keys) | [DTOs](../v0.2/Reference/dto/overview.md) |
+
+### Policies
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `policies` | map | [policies](../v0.2/Reference/policies/overview.md) |
+| `policies.<name>.given` | map of strings | [policies](../v0.2/Reference/policies/overview.md) |
+| `policies.<name>.params` | list of strings | [policies](../v0.2/Reference/policies/overview.md) |
+| `policies.<name>.when` | string or list of strings | [policies](../v0.2/Reference/policies/overview.md) |
+
+### UI
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `ui` | object | [UI](../v0.2/Reference/ui/overview.md) |
+| `ui.frontend` | object | [frontend](../v0.2/Reference/ui/frontend.md) |
+| `ui.frontend.pack` | string | [frontend](../v0.2/Reference/ui/frontend.md) |
+| `ui.frontend.output` | string | [frontend](../v0.2/Reference/ui/frontend.md) |
+| `ui.frontend.overwrite` | `never` \| `always` | [frontend](../v0.2/Reference/ui/frontend.md) |
+| `ui.config` | map | [UI](../v0.2/Reference/ui/overview.md) |
+| `ui.collections` | map | [collections](../v0.2/Reference/ui/collections.md) |
+| `ui.collections.<name>.fields` | map | [collections](../v0.2/Reference/ui/collections.md) |
+| `ui.collections.<name>.fields.<name>.from` | string | [collections](../v0.2/Reference/ui/collections.md) |
+| `ui.collections.<name>.fields.<name>.format` | string | [collections](../v0.2/Reference/ui/collections.md) |
+| `ui.components` | map | [components](../v0.2/Reference/ui/components.md) |
+| `ui.components.<name>.props` | map | [components](../v0.2/Reference/ui/components.md) |
+| `ui.components.<name>.props.<name>.required` | boolean | [components](../v0.2/Reference/ui/components.md) |
+| `ui.components.<name>.render` | object | [components](../v0.2/Reference/ui/components.md) |
+| `ui.components.<name>.render.component` | string | [components](../v0.2/Reference/ui/components.md) |
+| `ui.components.<name>.render.props` | map | [components](../v0.2/Reference/ui/components.md) |
+| `ui.views` | map | [views](../v0.2/Reference/ui/views.md) |
+| `ui.views.<name>.path` | string | [views](../v0.2/Reference/ui/views.md) |
+| `ui.views.<name>.component` | string | [views](../v0.2/Reference/ui/views.md) |
+| `ui.views.<name>.props` | map | [views](../v0.2/Reference/ui/views.md) |
+
+### Deploy
+
+| Key | Type | Reference |
+| --- | --- | --- |
+| `deploy` | object | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.name` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.port` | integer | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.runtime` | `docker` \| `systemd` | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services` | map | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.image` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.build` | string or object | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.build.context` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.build.dockerfile` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.build.args` | map | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.ports` | list of integers or strings | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.environment` | map or list of strings | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.volumes` | list of strings | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.depends_on` | list of strings or map | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.depends_on.<name>.condition` | `service_started` \| `service_healthy` \| `service_completed_successfully` | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.services.<name>.command` | string or list of strings | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.include` | list of strings | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.mongo` | object | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.mongo.local` | boolean | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.docker` | object | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.docker.image` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.systemd` | object | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.systemd.user` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
+| `deploy.systemd.restart` | string | [deploy](../v0.2/Reference/configuration/deploy.md) |
 
 ## Access values
 

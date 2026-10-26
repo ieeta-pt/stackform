@@ -42,7 +42,7 @@ entities:
 | `disposition` | `attachment` \| `inline` | `attachment` | How browsers are told to handle the download. |
 
 `unique`, `default`, `min`, `max`, `minLength`, `maxLength` and `format` do not
-apply to files and are rejected with `FIELD_CONSTRAINT_INVALID`. So are
+apply to files and are rejected with `SCHEMA_VALIDATION_ERROR`. So are
 `maxSize`, `types` and `disposition` on a non-file field.
 
 ### Arrays of files
@@ -50,7 +50,7 @@ apply to files and are rejected with `FIELD_CONSTRAINT_INVALID`. So are
 `type: array` with `items: { type: file, ... }` holds several files. The item
 options (`maxSize`, `types`, `disposition`) apply to each file. `maxItems` on
 the array caps how many files it holds; `maxItems` on any other field is
-rejected.
+rejected with `SCHEMA_VALIDATION_ERROR`.
 
 ### Where file fields are allowed
 

@@ -7,7 +7,7 @@ Under `version: "0.3"` an `imports` entry may be an **object** that vendors a
 custom handler package into the generated backend. The source directory is
 copied whole into `backend/<package>/`, the emitted code imports the vendored
 package name, and the declared dependencies are merged into the target manifest,
-so the generated target no longer needs the author's package to be installed.
+so the generated target does not need the author's package to be installed.
 
 ```yaml
 version: "0.3"
@@ -28,8 +28,10 @@ imports:
 
 A handler names the import alias, as in `handler: handlers.publish`. The
 alias (`handlers`) resolves to the vendored `package`, so the generated backend
-emits `import app_handlers` / `await app_handlers.publish(**kwargs)` — never the
-author-side dotted path.
+emits `import app_handlers` and calls `app_handlers.publish` — never the
+author-side dotted path. A handler may also name a module inside the package, as
+in `handlers.posts.publish`; the last name must be defined or imported at the top
+level of that module.
 
 ```yaml
 repositories:
@@ -104,5 +106,6 @@ one output directory neither shadows generated code nor keeps deleted files.
 | `IMPORT_SOURCE_ESCAPING_SYMLINK` | The vendored tree contains a symlink pointing outside it. |
 | `IMPORT_PACKAGE_SHADOWS_TARGET` | A vendored `package` name is already occupied by a generated module. |
 | `IMPORT_UNDECLARED_PACKAGE` | A handler references a package that no `imports` entry vendors. |
+| `IMPORT_HANDLER_NOT_FOUND` | A handler names a module or function its vendored package does not define. |
 | `IMPORT_REQUIRES_INVALID` | A `requires` entry is not a valid dependency specifier. |
 | `IMPORT_REQUIRES_CONFLICT` | Requirements for one library cannot be merged into one specifier. |

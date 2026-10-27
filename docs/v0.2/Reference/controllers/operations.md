@@ -3,11 +3,14 @@ title: "Controller Operations"
 description: Each key under controllers.<name>.operations configures or overrides one HTTP route.
 ---
 
-Each key under `controllers.<name>.operations` overrides one HTTP route on a
-minified controller. The set of routes a controller exposes is decided by the
-service group it points at (see "Which operations exist" below); the
-`operations:` map only customizes method, path, and access for those routes, or
-disables them with `<op>: false`.
+Each key under `controllers.<name>.operations` overrides one HTTP route of the
+controller. On a minified controller the routes are those of the service group
+it points at (see "Which operations exist" below); on an
+[explicit routes](overview.md#explicit-routes-form) controller they are the
+entries of its `routes:` map. The `operations:` map only customizes method,
+path, and access for those routes, or drops them with `<op>: false`. Naming a
+route the controller does not expose is reported as
+`DESUGAR_OPERATION_NOT_EXPOSED`.
 
 ## Operation config fields
 

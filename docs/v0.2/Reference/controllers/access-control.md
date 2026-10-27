@@ -109,6 +109,13 @@ given:
 A `<collection> by <param>` document binding loads a record by a different path
 parameter (for example `given: { owner: myOtherCollection by myRefId }`).
 
+On a route that runs a custom repository operation or a handler, a bare document
+binding loads the record named by the route's `{id}` parameter, within the scope
+of the other path parameters that name fields of its collection. The rule decides
+on that record before the operation runs; the operation's result is not
+row-filtered. A route without `{id}` cannot bind its record and is reported as
+`DOCUMENT_BINDING_INVALID`.
+
 ## Evaluation Order
 
 1. If the route is `public`, it is served with no checks.
@@ -362,6 +369,7 @@ controllers:
 | Unscoped role with multiple auth entities | `ACCESS_AMBIGUOUS_ROLE` | "Unscoped role 'X' is ambiguous with multiple auth entities; use 'entity:X'" |
 | Role used with no auth entities defined | `ACCESS_NO_AUTH_ENTITY` | "Cannot use role 'X' without auth entities" |
 | Malformed `given` document binding | `DOCUMENT_BINDING_INVALID` | "Invalid document binding: 'X'. Expected '<collection>' or '<collection> by <param>'" |
+| Bare document binding on a custom route without `{id}` | `DOCUMENT_BINDING_INVALID` | "'X' binds the route's record, but the route path has no record parameter" |
 | Invalid `when` expression | `WHEN_EXPR_INVALID` / `WHEN_OPERAND_INVALID` / `WHEN_OPERAND_MISSING` | See [when expressions](../when-expressions/overview.md). |
 | `when` references a root not declared in `given` | `WHEN_UNBOUND_SYMBOL` | "Unbound symbol 'X' in when expression; declare it in 'given'" |
 | Invalid `request*` binding value in `given` | `REQUEST_BINDING_INVALID` | "Invalid request binding: 'X'" |

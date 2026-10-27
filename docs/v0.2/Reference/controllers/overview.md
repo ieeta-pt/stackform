@@ -177,6 +177,35 @@ controllers:
 
 The minified `service` form is sugar that expands to this `routes` form during generation.
 
+The controller-level `access:` is the default of every explicit route that sets
+none; without it the routes are public. `operations.<name>` overrides the
+`method`, `path` or `access` of the route `<name>`, and `operations.<name>: false`
+drops it:
+
+```yaml
+controllers:
+  posts:
+    base_path: /posts
+    access: "*"
+    routes:
+      list: { service: list-posts, method: GET, path: "" }
+      get: { service: get-posts, method: GET, path: "/{id}" }
+      delete: { service: delete-posts, method: DELETE, path: "/{id}" }
+    operations:
+      list: { path: /all, access: public }
+      delete: false
+```
+
+Here `GET /posts/all` is public, `GET /posts/{id}` needs any authenticated
+principal, and there is no delete route.
+
+Each route is built from layers, each overriding the one before:
+
+| Controller form | Layers, least to most specific |
+|-----------------|--------------------------------|
+| Explicit routes (no `service:`) | controller `access` → `routes.<name>` → `operations.<name>` |
+| Minified (`service:`) | controller `access` → the service operation and its default method and path → `operations.<name>` → `routes.<name>` |
+
 ## Example
 
 ```yaml

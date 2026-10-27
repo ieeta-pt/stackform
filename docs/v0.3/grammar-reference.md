@@ -422,6 +422,16 @@ operations:
 
 An admin lists every row; any other signed-in user lists only their own.
 
+### Document bindings on custom routes
+
+On a route that runs a custom repository operation or a handler, a bare
+document binding loads the record named by the last path parameter, within the
+scope of the other path parameters that name fields of its collection. The rule
+decides on that record before the operation runs; the operation's result is not
+row-filtered. A route whose path has no parameter cannot bind its record and is
+reported as `DOCUMENT_BINDING_INVALID`; bind a record by another parameter with
+`<collection> by <param>`.
+
 ## `given:` bindings
 
 `given:` maps author-chosen symbol names to sources. `principal`, `document`,
@@ -654,7 +664,7 @@ fields hold upload metadata, so they cannot be compared in `when:` or `where`.
 
 | Code | Condition |
 | --- | --- |
-| `DOCUMENT_BINDING_INVALID` | A document binding is not `<collection>` or `<collection> by <param>`. |
+| `DOCUMENT_BINDING_INVALID` | A document binding is not `<collection>` or `<collection> by <param>`, names an unknown collection, or binds the record of a route that has none. |
 | `REQUEST_BINDING_INVALID` | A request binding has an unknown part or includes a leaf in `given:`. |
 | `REQUEST_TYPE_NOT_FOUND` | A request type is empty or not a primitive, entity, or DTO. |
 | `REQUEST_TYPE_ON_LEAF` | A type is attached to a non-typeable request part. |

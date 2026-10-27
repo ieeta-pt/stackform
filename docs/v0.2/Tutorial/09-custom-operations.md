@@ -252,7 +252,7 @@ Custom-operation routes are emitted by the FastAPI, DRF, and raw-ASGI targets.
 - Custom operations require `method` and `path` on the controller operation; there is no inference.
 - Generated targets pass their request object; `stackform run` passes a `RequestContext`.
 - For a plain parameterized read, prefer a repository `query` operation over a handler.
-- Custom operations participate in the same access vocabulary as CRUD; under `run` and `drf` the rules are enforced for custom routes, while the FastAPI custom route leaves enforcement to your handler.
+- Custom operations use the same access vocabulary as CRUD, and every target (`run`, FastAPI, raw ASGI and DRF) enforces the rules before your handler runs. A bare `document:` binding loads the record named by the route's `{id}` parameter.
 
 ## See Also
 

@@ -42,10 +42,22 @@ entities:
       id: { type: id }
       title: { type: string }
       ownerId: { type: string }
+policies:
+  live:
+    params: [record]
+    when: record.archivedAt is null
+  ownsParent:
+    given: { parent: "posts by postId" }
+    params: [caller]
+    when: parent.ownerId equals caller.sub
 repositories:
   users: { entity: user }
   posts: { entity: post }
-  comments: { entity: comment }
+  comments:
+    entity: comment
+    operations:
+      thread:
+        query: {thread}
   drafts: { entity: draft }
 services:
   users: { repository: users }
@@ -53,6 +65,7 @@ services:
   comments: { repository: comments }
   drafts: { repository: drafts }
   publish: { handler: handlers.publish }
+  thread: { repository: comments, operation: thread }
 controllers:
   users:
     service: users
@@ -94,6 +107,55 @@ controllers:
         access:
           - given: { document: posts }
             when: document.archivedAt is null
+  current:
+    base_path: /current
+    routes:
+      list:
+        service: posts
+        method: GET
+        path: ""
+        access:
+          - when: policy:live(posts)
+      get:
+        service: posts
+        method: GET
+        path: /{id}
+        access:
+          - when: policy:live(posts)
+  threads:
+    base_path: /threads
+    routes:
+      list:
+        service: comments
+        method: GET
+        path: /{postId}/comments
+        access:
+          - given: { principal: "identity:user" }
+            when: policy:ownsParent(identity:user)
+  feeds:
+    base_path: /feeds
+    routes:
+      thread:
+        service: thread
+        method: GET
+        path: /{id}
+        access:
+          - given: { principal: "identity:user", document: posts }
+            when: document.ownerId equals principal.sub
+  guarded:
+    base_path: /guarded
+    access:
+      - given: { principal: "identity:user" }
+        when: principal.sub equals 'nobody'
+    routes:
+      create: { service: posts, method: POST, path: /new }
+      list: { service: posts, method: GET, path: "" }
+      get: { service: posts, method: GET, path: "/{id}" }
+      delete: { service: posts, method: DELETE, path: "/{id}/gone" }
+    operations:
+      list: { path: /all, access: public }
+      get: { access: public }
+      delete: false
   owned:
     base_path: /owned
     routes:
@@ -179,6 +241,10 @@ async def publish(target):
     return {"published": True}
 '''
 
+# The ``thread`` repository operation, the comments of one post, in each datastore's query language
+SQL_THREAD = '{ sql: "SELECT * FROM comments WHERE postId = :id", params: { id: $id } }'
+MONGO_THREAD = "{ command: find, filter: { postId: $id } }"
+
 VERSIONS = ("0.2", "0.3")
 CASES = list(itertools.product(SERVERS, VERSIONS))
 
@@ -189,10 +255,10 @@ def case_id(case):
 
 
 @contextmanager
-def serving(server, version, directory, datastore=None):
-    """``server`` serving the spec at ``version``, its handlers module beside it."""
+def serving(server, version, directory, datastore=None, thread=SQL_THREAD):
+    """``server`` serving the spec at ``version`` with the ``thread`` query, its handlers module beside it."""
     (directory / "handlers.py").write_text(_HANDLERS)
-    spec = write_spec(directory, _SPEC.replace("{version}", version), datastore)
+    spec = write_spec(directory, _SPEC.replace("{version}", version).replace("{thread}", thread), datastore)
     with serve(server, spec, env={"PYTHONPATH": str(directory)}) as client:
         yield client
 
@@ -310,8 +376,9 @@ def test_request_is_null_holds_for_absent_body_fields(client):
     [({"archivedAt": None}, 200), ({}, 200), (ARCHIVED, 403)],
     ids=["explicit-null", "absent", "set"],
 )
-def test_is_null_admits_null_and_absent_values_only(client, accounts, fields, status):
-    assert _get(client, accounts, "/api/live", **fields).status_code == status
+@pytest.mark.parametrize("path", ["/api/live", "/api/current"], ids=["rule", "policy"])
+def test_is_null_admits_null_and_absent_values_only(client, accounts, path, fields, status):
+    assert _get(client, accounts, path, **fields).status_code == status
 
 
 def test_is_not_null_admits_null_values(client, accounts):
@@ -322,3 +389,59 @@ def test_is_not_null_denies_set_values_with_the_rule_reason(client, accounts):
     response = _get(client, accounts, "/api/posts", **ARCHIVED)
 
     assert (response.status_code, response.json()["detail"]) == (403, "Archived posts are hidden.")
+
+
+def test_policy_row_filter_lists_only_the_rows_it_admits(client, accounts):
+    basic = accounts["ann@x.io"][0]
+    live, archived = (client.post("/api/posts", json={"title": "p", **fields}, auth=basic).json() for fields in ({}, ARCHIVED))
+
+    ids = {row["id"] for row in client.get("/api/current").json()}
+
+    assert (live["id"] in ids, archived["id"] in ids) == (True, False)
+
+
+def test_policy_binding_a_parent_by_parameter_checks_that_parent(client, accounts):
+    ann, _, ann_post, ann_comment = accounts["ann@x.io"]
+    _, _, bob_post, _ = accounts["bob@x.io"]
+
+    rows = client.get(f"/api/threads/{ann_post['id']}/comments", auth=ann).json()
+
+    assert [row["id"] for row in rows] == [ann_comment["id"]]
+    assert client.get(f"/api/threads/{bob_post['id']}/comments", auth=ann).status_code == 403
+
+
+def test_repository_operation_route_binds_the_route_record(client, accounts):
+    ann, _, ann_post, ann_comment = accounts["ann@x.io"]
+    _, _, bob_post, _ = accounts["bob@x.io"]
+
+    rows = client.get(f"/api/feeds/{ann_post['id']}", auth=ann).json()
+
+    assert [row["id"] for row in rows] == [ann_comment["id"]]
+    assert client.get(f"/api/feeds/{bob_post['id']}", auth=ann).status_code == 403
+
+
+def test_explicit_controller_access_is_the_default_of_its_routes(client, accounts):
+    ann = accounts["ann@x.io"][0]
+
+    assert client.post("/api/guarded/new", json={"title": "t"}).status_code == 401
+    assert client.post("/api/guarded/new", json={"title": "t"}, auth=ann).status_code == 403
+
+
+def test_explicit_controller_operations_override_access(client, accounts):
+    _, _, ann_post, _ = accounts["ann@x.io"]
+
+    assert client.get(f"/api/guarded/{ann_post['id']}").status_code == 200
+
+
+def test_explicit_controller_operations_override_the_route_path(client, accounts):
+    _, _, ann_post, _ = accounts["ann@x.io"]
+
+    assert ann_post["id"] in {row["id"] for row in client.get("/api/guarded/all").json()}
+    assert client.get("/api/guarded").status_code == 404
+
+
+def test_explicit_controller_operation_set_to_false_drops_the_route(client, accounts):
+    ann, _, ann_post, _ = accounts["ann@x.io"]
+
+    assert client.delete(f"/api/guarded/{ann_post['id']}/gone", auth=ann).status_code == 404
+    assert client.get(f"/api/posts/{ann_post['id']}").status_code == 200

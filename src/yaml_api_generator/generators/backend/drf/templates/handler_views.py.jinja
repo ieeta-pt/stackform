@@ -6,6 +6,11 @@ from adrf.views import APIView
 from api.conflicts import ConflictError
 from api.handler_requests import HandlerRequest, invoke, json_body
 from api.service_inputs import prepare_service_inputs, resolve_access_bind
+{% set dto_imports = routes | selectattr("typed_body_model") | map(attribute="typed_body_model") | unique | list %}
+{% if dto_imports %}
+from api.payloads import conformed
+from api.serializers._dto import {{ dto_imports | join(", ") }}
+{% endif %}
 {% set ns_where = namespace(collections=[]) %}
 {% for route in routes %}{% for where_collection in route.where_collections %}
 {% if where_collection not in ns_where.collections %}{% set _ = ns_where.collections.append(where_collection) %}{% endif %}
@@ -76,6 +81,9 @@ class {{ path_routes[0].view_name }}(APIView):
         bound_inputs = resolve_access_bind(access_bindings, locals())
 {% else %}
         bound_inputs = {}
+{% endif %}
+{% if route.typed_body_model %}
+        body = conformed({{ route.typed_body_model }}, body)
 {% endif %}
         try:
             service_inputs = prepare_service_inputs(

@@ -18,7 +18,10 @@ from api.conflicts import ConflictError
 {% if ns.needs_models %}
 from api.serializers.{{ collection_name }} import {{ ns.model_imports | join(", ") }}
 {% endif %}
-{% set dto_imports = crud_routes | selectattr("typed_body_model") | map(attribute="typed_body_model") | unique | list %}
+{% set dto_imports = routes | selectattr("typed_body_model") | map(attribute="typed_body_model") | unique | list %}
+{% if ns.needs_models or dto_imports %}
+from api.payloads import conformed
+{% endif %}
 {% if dto_imports %}
 from api.serializers._dto import {{ dto_imports | join(", ") }}
 {% endif %}
@@ -169,9 +172,7 @@ await service.{{ method }}({{ route.record_id_param }}{{ caller() }})
 {% endmacro %}
 
 {% macro validated_data(route) %}
-            serializer = {{ route.typed_body_model or route.body_model }}(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = {{ bound(route, "serializer.validated_data") }}
+            data = {{ bound(route, "conformed(" ~ route.body_model ~ ", " ~ ("body" if route.typed_body_model else "request.data") ~ ")") }}
 {% endmacro %}
 
 {% for path, path_routes in routes | rejectattr("operation", "equalto", "login") | groupby("relative_path") %}
@@ -194,6 +195,9 @@ class {{ path_routes[0].view_name }}(APIView):
 {{ request_locals(route) }}
 {{ pre_fetch_check(route) }}
 {{ bind_inputs(route) }}
+{% if route.typed_body_model %}
+        body = conformed({{ route.typed_body_model }}, {{ "body" if route.runs_operation else "request.data" }})
+{% endif %}
         try:
             service_inputs = prepare_service_inputs(path_params, body, {{ route.service_input | py_literal }}, {{ route.service_forwarding | py_literal }}, bound_inputs)
 {% if route.runs_operation %}

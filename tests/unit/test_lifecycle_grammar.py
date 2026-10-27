@@ -112,10 +112,11 @@ def test_soft_delete_adds_a_readonly_timestamp_and_binds_the_lifecycle(tmp_path,
 
 
 @pytest.mark.parametrize("version", VERSIONS)
-def test_declared_soft_delete_field_is_kept(tmp_path, version):
+def test_declared_soft_delete_field_is_kept_and_made_readonly(tmp_path, version):
     spec = _spec(version, {"softDelete": "removedAt"})
-    spec["entities"]["post"]["fields"]["removedAt"] = {"type": "datetime"}
-    assert _load(tmp_path, spec).collections["posts"].fields["removedAt"] == {"type": "datetime"}
+    spec["entities"]["post"]["fields"]["removedAt"] = {"type": "datetime", "required": False}
+    fields = _load(tmp_path, spec).collections["posts"].fields
+    assert fields["removedAt"] == {"type": "datetime", "required": False, "readonly": True}
 
 
 def test_v01_soft_delete_uses_deleted_at(tmp_path):

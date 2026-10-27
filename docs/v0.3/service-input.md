@@ -35,7 +35,8 @@ An input field is `string`, `number`, `boolean`, `datetime`, `enum`, `array`,
 `object` or `ref`, and takes the keys an entity field of that type takes (see
 [Field types](../v0.2/Reference/entities/field-types.md)). An `object` input
 with `properties` checks every nested key and rejects keys it does not declare
-unless `additionalProperties: true`. A `file` input is rejected with
+unless `additionalProperties: true`. A `ref` input names a declared entity or DTO; any other
+target is rejected with `DTO_NOT_FOUND`. A `file` input is rejected with
 `FILE_FIELD_CONTEXT_INVALID`; files travel through
 [file endpoints](file-endpoints.md). Fields are required unless their
 configuration sets `required: false`.

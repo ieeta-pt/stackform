@@ -70,7 +70,7 @@ With `basePath: /api` and `version: v1`, the notes routes live under
 | `boolean` | True/false | `default`, `readonly` |
 | `datetime` | ISO 8601 timestamp string | `required`, `default`, `readonly` |
 | `enum` | One of a fixed set of values | `values: [...]` required; `default` optional |
-| `array` | List of items | `items:` sub-schema (required) |
+| `array` | List of items | `items:` sub-schema (required), with its type and that type's constraints |
 | `object` | Free-form JSON object | `properties:` (optional typed shape), `additionalProperties` |
 | `ref` | String id pointing at another entity | `ref: entityName` required |
 
@@ -96,8 +96,8 @@ document is stored):
 |--------|------------|--------|
 | `min` | `number` | value must be `>= min` |
 | `max` | `number` | value must be `<= max` |
-| `minLength` | `string` (and `ref`) | string length must be `>= minLength` |
-| `maxLength` | `string` (and `ref`) | string length must be `<= maxLength` |
+| `minLength` | `string` | string length must be `>= minLength` |
+| `maxLength` | `string` | string length must be `<= maxLength` |
 | `values` | `enum` | value must be one of the listed values |
 | `format` | `string` | value must be a valid `email`, `uri`, `e164`, `uuidv4` or `uuidv7` |
 

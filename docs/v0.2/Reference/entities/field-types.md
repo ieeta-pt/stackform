@@ -160,7 +160,7 @@ scores:
 
 | Option | Required | Type | Default | Description |
 |--------|----------|------|---------|-------------|
-| `items` | yes | field config | -- | Config every element must satisfy, with its own type and constraints. |
+| `items` | yes | field config | -- | Config every element must satisfy: its `type` and the constraints of that type. `required`, `readonly` and `default` describe a property, not an element, and are rejected inside `items`. |
 
 ## `type: object`
 

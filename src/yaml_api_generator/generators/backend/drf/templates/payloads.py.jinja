@@ -25,6 +25,13 @@ def partial(serializer: type[PayloadSerializer], name: str) -> type[PayloadSeria
     return type(name, (serializer,), {"omittable": True})
 
 
+def conformed(serializer: type[PayloadSerializer], data: Any) -> dict[str, Any]:
+    """``data`` checked by ``serializer``; a mismatch raises the ``ValidationError`` answered with 422."""
+    checked = serializer(data=data)
+    checked.is_valid(raise_exception=True)
+    return checked.validated_data
+
+
 def exception_handler(exc: Exception, context: dict[str, Any]):
     """DRF's handler, answering an invalid payload with 422 as every other target does."""
     response = views.exception_handler(exc, context)

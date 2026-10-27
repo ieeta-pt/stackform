@@ -9,6 +9,7 @@ from .pipeline import Pipeline
 from .repositories import RepositoryRegistry
 from .steps import (
     AuthorizeRouteStep,
+    ConformDtoStep,
     HandlerStep,
     JWKSStep,
     LoginStep,
@@ -172,6 +173,7 @@ class PipelineBuilder:
         body_steps = [
             step
             for step in (
+                self._dto_step(route),
                 self._service_input_step(route),
                 self._identity_step(route),
                 self._validate_body_step(route) if route.operation in _CRUD_OPS else None,
@@ -207,11 +209,12 @@ class PipelineBuilder:
         return [fetch, *([post_fetch_step] if post_fetch_step is not None else [])]
 
     def _build_handler_pipeline(self, route: RuntimeRouteDescriptor) -> Pipeline:
-        steps: list[Step] = self._base_steps(route)
-        service_input_step = self._service_input_step(route)
-        if service_input_step is not None:
-            steps.append(service_input_step)
-        steps.append(HandlerStep(route.handler))
+        body_steps = (self._dto_step(route), self._service_input_step(route))
+        steps = [
+            *self._base_steps(route),
+            *(step for step in body_steps if step is not None),
+            HandlerStep(route.handler),
+        ]
         return self._pipeline(route, steps)
 
     def _base_steps(self, route: RuntimeRouteDescriptor) -> list[Step]:
@@ -245,7 +248,11 @@ class PipelineBuilder:
     def _validate_body_step(self, route: RuntimeRouteDescriptor) -> Step:
         collection = self._ctx.collections[route.collection]
         identity_collection = self._ctx.auth.identity_collections.get(route.collection)
-        return ValidateBodyStep(collection, route.operation, identity_collection, route.body_dto)
+        return ValidateBodyStep(collection, route.operation, identity_collection)
+
+    @staticmethod
+    def _dto_step(route: RuntimeRouteDescriptor) -> Step | None:
+        return None if route.body_dto is None else ConformDtoStep(route.body_dto, route.operation)
 
     def _service_input_step(self, route: RuntimeRouteDescriptor) -> Step | None:
         if route.service_input is None and not route.service_forwarding:

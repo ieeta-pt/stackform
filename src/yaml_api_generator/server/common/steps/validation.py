@@ -34,21 +34,29 @@ def login_properties(
     return {identifier: SECRET_FIELD, "password": SECRET_FIELD}
 
 
+def ConformDtoStep(dto: IRDto, operation: str) -> Step:
+    """Check the body against the DTO a request binding names and continue with the conformed body; updates accept any subset."""
+    model = Model(payload_fields(dto.fields), partial=operation == "update")
+
+    def step(ctx: RequestContext) -> RequestContext:
+        ctx.body = model.conform(ctx.body)
+        return ctx
+
+    return step
+
+
 def ValidateBodyStep(
     collection: RuntimeCollectionDescriptor,
     operation: str,
     identity_collection: RuntimeIdentityDescriptor | None = None,
-    dto: IRDto | None = None,
 ) -> Step:
-    """Check the body against ``dto`` when the route types it, else against the entity; updates accept any subset."""
+    """Check the body against the entity; updates accept any subset."""
     if operation in _NO_BODY_OPS:
         return lambda ctx: ctx
     if operation == "login":
         if identity_collection is None:
             raise ValueError("login operation requires an identity collection")
         properties = login_properties(identity_collection)
-    elif dto is not None:
-        properties = payload_fields(dto.fields)
     else:
         properties = {
             **credential_properties(operation, identity_collection),

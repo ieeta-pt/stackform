@@ -4,6 +4,9 @@ from typing import Any
 from access import AccessDenied, Decision, all_of, conjoin, constant, decide, disjoin, equals, has_path, held_roles, is_null, negate, one_of, value_at
 from handler_requests import HandlerRequest, invoke
 from service_inputs import prepare_service_inputs, resolve_access_bind
+{% if routes | selectattr("typed_body_model") | list %}
+import validation
+{% endif %}
 {% set ns_where = namespace(collections=[]) %}
 {% for route in routes %}{% for where_collection in route.where_collections %}
 {% if where_collection not in ns_where.collections %}{% set _ = ns_where.collections.append(where_collection) %}{% endif %}
@@ -79,6 +82,9 @@ async def {{ route.handler_name }}(
     bound_inputs = resolve_access_bind(access_bindings, locals())
 {% else %}
     bound_inputs = {}
+{% endif %}
+{% if route.typed_body_model %}
+    body = validation.{{ route.typed_body_model }}.conform(body)
 {% endif %}
     service_inputs = prepare_service_inputs(
         url_params,

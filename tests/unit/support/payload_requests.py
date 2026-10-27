@@ -2,8 +2,8 @@
 
 The spec covers formats, array items, closed nested objects, defaults, readonly
 fields, datetimes, strict scalars, partial updates and DTO-typed bodies, which
-access rules bind for any signed-in user. Round trips check what the apps store
-and return besides the status codes.
+access rules bind for any signed-in user and which must suit the entity too.
+Round trips check what the apps store and return besides the status codes.
 """
 
 import textwrap
@@ -48,6 +48,7 @@ dto:
       labels: { type: array, items: { type: string, maxLength: 8 } }
       contact: { type: string, format: email }
       seen: { type: datetime, default: "2024-01-01T00:00:00Z" }
+      draft: { type: boolean }
 entities:
   user:
     type: auth
@@ -162,6 +163,7 @@ NOTES = [
     ({"role": "admin", "seen": "2024-01-01T00:00:00Z"}, 200),
     ({"role": "admin", "seen": "soon"}, 422),
     ({"role": "admin", "unknown": 1}, 422),
+    ({"role": "admin", "draft": True}, 422),
     ({}, 422),
 ]
 ROUND_TRIPS = [

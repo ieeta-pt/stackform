@@ -69,14 +69,10 @@ from dependencies.access import matching
 {% if ns.model_imports %}
 from models.{{ collection_name }} import {{ ns.model_imports | join(", ") }}
 {% endif %}
-{% set ns_dto = namespace(dto_imports=[]) %}
-{% for route in crud_routes %}
-{% if route.typed_body_model and route.typed_body_model not in ns_dto.dto_imports %}
-{% set _ = ns_dto.dto_imports.append(route.typed_body_model) %}
-{% endif %}
-{% endfor %}
-{% if ns_dto.dto_imports %}
-from models._dto import {{ ns_dto.dto_imports | join(", ") }}
+{% set dto_imports = routes | selectattr("typed_body_model") | map(attribute="typed_body_model") | unique | list %}
+{% if dto_imports %}
+from models._dto import {{ dto_imports | join(", ") }}
+from dependencies.payloads import conformed
 {% endif %}
 {% set security_schemes = [] %}
 {% if auth.has_api_key_auth %}
@@ -107,6 +103,12 @@ _files = record_files[{{ collection_name | tojson }}]
 {% macro upload_param(route, body_model, partial) %}{% if files %}, upload: RecordUpload = Depends(record_upload(_files, {{ body_model }}, partial={{ partial | py_bool }}{% if route.operation == "replace" %}, read=read_json{% endif %})){% endif %}{% endmacro %}
 {% macro upload_body(body_model, partial) %}{% if files %}upload_request_body(_files, {{ body_model }}, partial={{ partial | py_bool }}){% endif %}{% endmacro %}
 {% macro json_body(body_model) %}{% if files %}json_request_body(_files, {{ body_model }}, partial=False){% endif %}{% endmacro %}
+{# A DTO-typed record body must also be a valid record payload #}
+{% macro record_payload(route) %}
+{% if route.typed_body_model and route.body_model and not files %}
+    payload = conformed({{ route.body_model }}, payload.model_dump(mode="json"))
+{% endif %}
+{% endmacro %}
 {# Writes the record, then drops the stored bytes no longer referenced by it #}
 {% macro persist(call, orphans="_files.orphaned(existing, result)") %}
 {% if files %}
@@ -259,6 +261,9 @@ async def {{ route.operation }}_{{ collection_name }}(request: Request{% for nam
         pass
 {{ request_locals(route, "_body") }}
 {{ pre_fetch_guard(route) }}
+{% if route.typed_body_model %}
+    _body = conformed({{ route.typed_body_model }}, _body).model_dump(mode="json")
+{% endif %}
 {{ bind_inputs(route) }}
 {{ prepare_inputs(route, "dict(request.path_params)", "_body") }}
 {{ call_with_request("svc." ~ route.operation ~ "(_request)", "principal" if auth.enabled and route.needs_auth else "None", "_body", "_service_inputs") }}
@@ -313,6 +318,7 @@ async def get_{{ collection_name }}({{ route.record_id_param }}: str{{ extra_pat
 async def create_{{ collection_name }}({{ (payload_param(body_model) ~ extra_path_params(route) ~ request_param(route) ~ auth_param(route) ~ upload_param(route, body_model, partial)) | trim(chars=", ") }}, {{ svc_dep() }}{{ where_repo_params(route) }}) -> Any:
 {{ request_locals(route, sent_expr) }}
 {{ pre_fetch_guard(route) }}
+{{ record_payload(route) }}
 {{ bind_inputs(route) }}
 {{ prepare_inputs(route, path_values(route), sent_expr) }}
     return await svc.create({{ record_expr }})
@@ -327,6 +333,7 @@ async def {{ route.operation }}_{{ collection_name }}({{ route.record_id_param }
     existing = await {{ record_call(route, "get") }}
 {{ post_fetch_guard(route, "existing") }}
 {% endif %}
+{{ record_payload(route) }}
 {{ bind_inputs(route) }}
 {{ prepare_inputs(route, path_values(route), sent_expr) }}
 {{ persist(record_call(route, route.operation, record_expr)) }}

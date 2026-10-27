@@ -53,6 +53,9 @@ INAPPLICABLE = [
     {"type": "object", "properties": {"a": {"type": "string", "unique": True}}},
     {"type": "object", "properties": {"a": {"type": "number", "format": "email"}}},
     {"type": "array", "items": {"type": "string", "unique": True}},
+    {"type": "array", "items": {"type": "string", "required": True}},
+    {"type": "array", "items": {"type": "string", "readonly": True}},
+    {"type": "array", "items": {"type": "string", "default": "a"}},
 ]
 INCOHERENT = [
     {"type": "number", "min": 5, "max": 1},
@@ -77,7 +80,7 @@ VALID = [
     {"type": "string", "format": "email", "minLength": 1, "default": "a@b.co"},
     {"type": "number", "min": 1, "max": 1, "default": 1},
     {"type": "enum", "values": ["a"], "default": "a"},
-    {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "number"}}}},
+    {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "number", "required": True, "default": 1}}}},
     {"type": "object", "properties": {"a": {"type": "string", "format": "uri"}}, "additionalProperties": False},
 ]
 
@@ -133,3 +136,16 @@ def test_incoherent_service_input_default_is_rejected(tmp_path):
     spec = _entity_spec("0.3", {"type": "string"})
     spec["services"]["things"]["input"] = {"n": {"type": "number", "max": 1, "default": 5}}
     assert _codes(tmp_path, spec) == {"FIELD_CONSTRAINT_INVALID"}
+
+
+@pytest.mark.parametrize("field", DANGLING)
+def test_service_input_ref_to_undeclared_record_is_rejected(tmp_path, field):
+    spec = _entity_spec("0.3", {"type": "string"})
+    spec["services"]["things"]["input"] = {"f": field}
+    assert _codes(tmp_path, spec) == {"DTO_NOT_FOUND"}
+
+
+def test_service_input_ref_to_declared_record_is_accepted(tmp_path):
+    spec = _entity_spec("0.3", {"type": "string"})
+    spec["services"]["things"]["input"] = {"f": {"type": "ref", "ref": "thing"}}
+    assert _codes(tmp_path, spec) == set()

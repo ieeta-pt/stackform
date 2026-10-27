@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Annotated, Any, ClassVar
 
+from fastapi.exceptions import RequestValidationError
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -11,6 +12,7 @@ from pydantic import (
     GetCoreSchemaHandler,
     GetJsonSchemaHandler,
     SerializerFunctionWrapHandler,
+    ValidationError,
     create_model,
     model_serializer,
     model_validator,
@@ -99,3 +101,11 @@ def partial(model: type[Payload], name: str) -> type[Payload]:
             for field_name, info in model.model_fields.items()
         },
     )
+
+
+def conformed(model: type[Payload], data: Any) -> Payload:
+    """``data`` checked against ``model``; a mismatch is answered 422 like any invalid request body."""
+    try:
+        return model.model_validate(data)
+    except ValidationError as error:
+        raise RequestValidationError(error.errors(include_url=False, include_context=False)) from error

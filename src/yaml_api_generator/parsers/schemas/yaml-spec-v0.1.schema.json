@@ -188,15 +188,13 @@
       }
     },
     "FieldShape": {
-      "$comment": "The keys each field type accepts; FieldConfig and NestedFieldConfig close it.",
+      "$comment": "The value keys each field type accepts; PropertyShape adds the keys of a property, and ItemConfig closes it for array items.",
       "type": "object",
       "required": ["type"],
       "properties": {
         "type": {
           "enum": ["string", "number", "boolean", "datetime", "enum", "array", "object", "ref", "id"]
-        },
-        "required": { "type": "boolean" },
-        "default": {}
+        }
       },
       "allOf": [
         {
@@ -222,7 +220,7 @@
         },
         {
           "if": { "properties": { "type": { "const": "array" } }, "required": ["type"] },
-          "then": { "required": ["items"], "properties": { "items": { "$ref": "#/$defs/NestedFieldConfig" } } }
+          "then": { "required": ["items"], "properties": { "items": { "$ref": "#/$defs/ItemConfig" } } }
         },
         {
           "if": { "properties": { "type": { "const": "object" } }, "required": ["type"] },
@@ -246,15 +244,25 @@
         }
       ]
     },
+    "PropertyShape": {
+      "$comment": "A field with the keys of a property of a record; FieldConfig and NestedFieldConfig close it.",
+      "$ref": "#/$defs/FieldShape",
+      "properties": { "required": { "type": "boolean" }, "default": {} }
+    },
+    "ItemConfig": {
+      "$comment": "The items of an array field.",
+      "$ref": "#/$defs/FieldShape",
+      "unevaluatedProperties": false
+    },
     "FieldConfig": {
       "$comment": "A top-level collection field.",
-      "$ref": "#/$defs/FieldShape",
+      "$ref": "#/$defs/PropertyShape",
       "properties": { "unique": { "type": "boolean" } },
       "unevaluatedProperties": false
     },
     "NestedFieldConfig": {
-      "$comment": "A field inside object properties or array items.",
-      "$ref": "#/$defs/FieldShape",
+      "$comment": "A field inside object properties.",
+      "$ref": "#/$defs/PropertyShape",
       "unevaluatedProperties": false
     },
     "RolesConfig": {

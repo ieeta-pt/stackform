@@ -136,6 +136,9 @@ async def {{ route.handler_name }}(url_params: dict, body: dict | None, headers:
 {% endif %}
 {{ pre_fetch_authorize(route) }}
 {{ bind_inputs(route) }}
+{% if route.typed_body_model %}
+    body = validation.{{ route.typed_body_model }}.conform(body)
+{% endif %}
     service_inputs = prepare_service_inputs(url_params, body, {{ route.service_input | py_literal }}, {{ route.service_forwarding | py_literal }}, bound_inputs)
 {% if route.runs_operation %}
 {{ run_operation(route) }}
@@ -162,7 +165,7 @@ async def {{ route.handler_name }}(url_params: dict, body: dict | None, headers:
 {% elif route.operation == "create" %}
         if body is None:
             return 422, {"detail": "Request body is required"}
-        data = {{ bound(route, "validation." ~ (route.typed_body_model or route.body_model) ~ ".conform(body)") }}
+        data = {{ bound(route, "validation." ~ route.body_model ~ ".conform(body)") }}
 {% if route.record_parent_params %}
         data = {**data, **{{ record_criteria(route) }}}
 {% endif %}
@@ -174,7 +177,7 @@ async def {{ route.handler_name }}(url_params: dict, body: dict | None, headers:
 {% elif route.operation == "update" %}
         if body is None:
             return 422, {"detail": "Request body is required"}
-        data = {{ bound(route, "validation." ~ (route.typed_body_model or route.body_model) ~ ".conform(body)") }}
+        data = {{ bound(route, "validation." ~ route.body_model ~ ".conform(body)") }}
 {% if route is needs_post_fetch %}
 {% if route.record_parent_params %}
         existing = await service.get_by({{ record_criteria(route) }})
@@ -195,7 +198,7 @@ async def {{ route.handler_name }}(url_params: dict, body: dict | None, headers:
 {% elif route.operation == "replace" %}
         if body is None:
             return 422, {"detail": "Request body is required"}
-        data = {{ bound(route, "validation." ~ (route.typed_body_model or route.body_model) ~ ".conform(body)") }}
+        data = {{ bound(route, "validation." ~ route.body_model ~ ".conform(body)") }}
 {% if route is needs_post_fetch %}
 {% if route.record_parent_params %}
         existing = await service.get_by({{ record_criteria(route) }})

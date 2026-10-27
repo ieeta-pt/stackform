@@ -1,7 +1,7 @@
 """Binds a repository lifecycle to the fields of the entity it stores.
 
-The soft-delete timestamp is added to the entity as a read-only datetime when
-the entity does not declare it; every lifecycle timestamp must be a datetime.
+The soft-delete timestamp is a read-only datetime of the entity, added when the
+entity does not declare it; every lifecycle timestamp must be a datetime.
 """
 
 from collections.abc import Mapping
@@ -10,7 +10,7 @@ from typing import Any
 from yaml_api_generator.parsers.errors import ConfigError
 from yaml_api_generator.runtime.lifecycle import Expiry, Lifecycle
 
-_TIMESTAMP = {"type": "datetime", "readonly": True}
+_TIMESTAMP = {"type": "datetime"}
 
 
 def lifecycle_from_config(config: Mapping[str, Any]) -> Lifecycle:
@@ -27,7 +27,7 @@ def bind_lifecycle(
 ) -> tuple[dict[str, Any], list[ConfigError]]:
     """The entity fields with the removal timestamp in place, and the errors of misdeclared timestamps."""
     removal = lifecycle.removal
-    bound = {**fields, **({removal: _TIMESTAMP} if removal and removal not in fields else {})}
+    bound = {**fields, **({removal: _readonly(fields.get(removal, _TIMESTAMP))} if removal else {})}
     timestamps = {
         f"{path}.softDelete": removal,
         f"{path}.ttl.field": lifecycle.expiry.field if lifecycle.expiry else None,
@@ -37,6 +37,10 @@ def bind_lifecycle(
         for key_path, name in timestamps.items()
         if name and (error := _timestamp_error(bound, name, key_path)) is not None
     ]
+
+
+def _readonly(declared: Any) -> Any:
+    return {**declared, "readonly": True} if isinstance(declared, Mapping) else declared
 
 
 def _timestamp_error(fields: Mapping[str, Any], name: str, path: str) -> ConfigError | None:

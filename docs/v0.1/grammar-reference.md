@@ -102,10 +102,14 @@ FieldConfig:                                  # a top-level collection field
   <the keys of its type, below>
   unique?: boolean
 
-NestedFieldConfig:                            # an object property or array item
+NestedFieldConfig:                            # an object property
   <the keys of its type, below>
 
-Keys of every type:
+ItemConfig:                                   # the items of an array
+  type!: <a field type>
+  <the keys added by its type, below>
+
+Keys of every type, except in ItemConfig:
   type!: enum(string, number, boolean, datetime, enum, array, object, ref, id)
   required?: boolean
   default?: any                               # must satisfy the field's own keys
@@ -121,7 +125,7 @@ Keys added by type:
   enum:
     values!: array<string>                    # at least one value
   array:
-    items!: NestedFieldConfig
+    items!: ItemConfig
   object:
     properties?: map<string, NestedFieldConfig>
     additionalProperties?: boolean            # default: false with properties, true without

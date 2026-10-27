@@ -524,7 +524,7 @@
       }
     },
     "FieldShape": {
-      "$comment": "The keys each field type accepts; FieldConfig, NestedFieldConfig and PayloadFieldConfig close it.",
+      "$comment": "The value keys each field type accepts; PropertyShape adds the keys of a property, and ItemConfig closes it for array items.",
       "type": "object",
       "required": [
         "type"
@@ -543,31 +543,9 @@
             "id",
             "file"
           ]
-        },
-        "required": {
-          "type": "boolean"
-        },
-        "readonly": {
-          "type": "boolean"
         }
       },
       "allOf": [
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "not": {
-                  "const": "file"
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "default": {}
-            }
-          }
-        },
         {
           "if": {
             "properties": {
@@ -663,7 +641,7 @@
             ],
             "properties": {
               "items": {
-                "$ref": "#/$defs/NestedFieldConfig"
+                "$ref": "#/$defs/ItemConfig"
               }
             }
           }
@@ -798,9 +776,44 @@
         }
       ]
     },
+    "PropertyShape": {
+      "$comment": "A field with the keys of a property of a record; FieldConfig, NestedFieldConfig and PayloadFieldConfig close it.",
+      "$ref": "#/$defs/FieldShape",
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "readonly": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "not": {
+                  "const": "file"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {}
+            }
+          }
+        }
+      ]
+    },
+    "ItemConfig": {
+      "$comment": "The items of an array field.",
+      "$ref": "#/$defs/FieldShape",
+      "unevaluatedProperties": false
+    },
     "FieldConfig": {
       "$comment": "A top-level entity field.",
-      "$ref": "#/$defs/FieldShape",
+      "$ref": "#/$defs/PropertyShape",
       "unevaluatedProperties": false,
       "allOf": [
         {
@@ -824,13 +837,13 @@
       ]
     },
     "NestedFieldConfig": {
-      "$comment": "A field inside object properties or array items.",
-      "$ref": "#/$defs/FieldShape",
+      "$comment": "A field inside object properties.",
+      "$ref": "#/$defs/PropertyShape",
       "unevaluatedProperties": false
     },
     "PayloadFieldConfig": {
       "$comment": "A DTO or service input field, which carries no persistence keys.",
-      "$ref": "#/$defs/FieldShape",
+      "$ref": "#/$defs/PropertyShape",
       "unevaluatedProperties": false,
       "properties": {
         "type": {

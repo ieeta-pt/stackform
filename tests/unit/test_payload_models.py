@@ -73,8 +73,10 @@ def test_generated_drf_serializers_validate_through_the_shared_validator(mongo_s
     assert 'ItemsUpdatePayload = partial(ItemsFields, "ItemsUpdatePayload")' in serializers
     assert "class ItemsCreatePayload(ItemsFields):" in serializers
     notes = (api / "views" / "notes.py").read_text()
-    assert "NoteInput(data=request.data)" in notes
-    assert "NoteInputUpdatePayload(data=request.data)" in notes
+    assert "conformed(NoteInput, request.data)" in notes
+    assert "conformed(NotesCreatePayload, body)" in notes
+    assert "conformed(NoteInputUpdatePayload, request.data)" in notes
+    assert "conformed(NotesUpdatePayload, body)" in notes
 
 
 def test_generated_drf_serves_async_views_at_spec_paths(mongo_spec_file):
@@ -96,14 +98,20 @@ def _is_field_config(node: ast.expr) -> bool:
 
 
 def _field_declarations(source: str) -> Counter:
-    """Each field a module declares, as a class annotation or a payload's field config map entry.
+    """Each field a module declares, as a class annotation or an entry of a payload's field config map.
 
     A declaration is its name with its type, so same-named fields of unrelated
     payloads stay distinct while a field copied into a sibling payload repeats.
     Nested properties belong to their parent's declaration.
     """
     nodes = list(ast.walk(ast.parse(source)))
-    payload_maps = (arg for node in nodes if isinstance(node, ast.Call) for arg in node.args)
+    payload_maps = (
+        *(arg for node in nodes if isinstance(node, ast.Call) for arg in node.args),
+        *(
+            node.value for node in nodes
+            if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "properties" for target in node.targets)
+        ),
+    )
     annotations = (
         (node.target.id, ast.unparse(node.annotation))
         for node in nodes

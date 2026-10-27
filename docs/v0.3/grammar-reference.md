@@ -122,14 +122,15 @@ the v0.2 reference describes.
 An entity field (`entities.<name>.fields.<name>`), a DTO field
 (`dto.<name>.fields.<name>`), a service input field
 (`services.<name>.input.<name>`) and a nested field (`items`, or
-`properties.<name>`) each take `type` and the keys of that type.
+`properties.<name>`) each take `type` and the keys of that type. `items` takes
+no `required`, `readonly` or `default`.
 
 | Key | Accepted on | Type | Reference |
 | --- | --- | --- | --- |
 | `type` | every field | `string` \| `number` \| `boolean` \| `datetime` \| `enum` \| `array` \| `object` \| `ref` \| `id` \| `file` | [field types](../v0.2/Reference/entities/field-types.md), [File fields](file-fields.md) |
-| `required` | every field | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
-| `readonly` | every field | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
-| `default` | every type except `file` | a value of the field's type | [field types](../v0.2/Reference/entities/field-types.md) |
+| `required` | every field except `items` | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `readonly` | every field except `items` | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
+| `default` | every field except `items`, every type except `file` | a value of the field's type | [field types](../v0.2/Reference/entities/field-types.md) |
 | `unique` | top-level entity fields, every type except `file` | boolean | [field types](../v0.2/Reference/entities/field-types.md) |
 | `minLength` | `string` | integer | [field types](../v0.2/Reference/entities/field-types.md) |
 | `maxLength` | `string` | integer | [field types](../v0.2/Reference/entities/field-types.md) |

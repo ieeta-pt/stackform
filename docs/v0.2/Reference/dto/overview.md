@@ -69,8 +69,16 @@ declare returns 422.
 ## Validation timing
 
 When a request binding names a DTO (for example `given: { body: request:createMembership }`),
-the request body is validated against that DTO. A request the access rules admit
-whose body does not match returns 422. See
+the request body is validated against that DTO on every route the binding guards:
+CRUD routes, handler services and custom operations. A request the access rules
+admit whose body does not match returns 422. Absent DTO fields that declare a
+`default` take it, so a handler or operation receives the defaulted body. On an
+update route every DTO field is optional.
+
+On a create, update or replace route the body is then written to the entity, so
+it must also be a valid write of that entity: a DTO field the entity does not
+declare, a readonly entity field, or a missing required entity field returns 422.
+See
 [when expressions](../when-expressions/overview.md) for the binding forms and the
 runtime model.
 

@@ -54,6 +54,7 @@ from .session_cookie import clear_session_cookies, issue_csrf_token, set_session
 
 
 WRITE_OPERATIONS = frozenset({"create", "update", "replace"})
+_RECORD_BODIES = WRITE_OPERATIONS | {"login", "refresh"}
 _PATH_TOKEN = re.compile(r"\{(\w+)\}")
 
 BodyReader = Callable[[Request], RequestBody | None]
@@ -84,11 +85,20 @@ def create_pydantic_model_fields(
     }
 
 
+def dto_pydantic_model(dto: IRDto, operation: str) -> type[BaseModel]:
+    """The documented body of a route a request binding types with ``dto``; ``ConformDtoStep`` validates it."""
+    model = create_model(
+        to_pascal_case(dto.name),
+        __base__=Payload,
+        **create_pydantic_model_fields(payload_fields(dto.fields)),
+    )
+    return partial(model, f"{model.__name__}UpdatePayload") if operation == "update" else model
+
+
 def create_pydantic_model(
     collection: RuntimeCollectionDescriptor,
     operation: str,
     identity_collection: RuntimeIdentityDescriptor | None = None,
-    dto: IRDto | None = None,
 ) -> type[BaseModel] | None:
     """The documented body of ``operation``; ``ValidateBodyStep`` validates the body itself."""
     model_name = to_pascal_case(collection.name)
@@ -106,12 +116,6 @@ def create_pydantic_model(
         )
     if operation not in WRITE_OPERATIONS:
         return None
-    if dto is not None:
-        return create_model(
-            to_pascal_case(dto.name),
-            __base__=Payload,
-            **create_pydantic_model_fields(payload_fields(dto.fields)),
-        )
     fields = create_model(
         f"{model_name}Fields",
         __base__=Payload,
@@ -140,18 +144,7 @@ def register_fastapi_routes(
         pipeline = pipeline_builder.build_for_route(route)
         pipelines[(route.method, route.path)] = pipeline
 
-        body_model: type[BaseModel] | None = None
-        if route.handler is None and route.collection is not None:
-            collection = ctx.collections[route.collection]
-            identity_collection = ctx.auth.identity_collections.get(route.collection)
-            body_model = create_pydantic_model(
-                collection,
-                route.operation,
-                identity_collection,
-                route.body_dto,
-            )
-            if ctx.session.uses_cookie and route.operation == "refresh":
-                body_model = None
+        body_model = _route_body_model(ctx, route)
 
         record_files = files.get(route.collection)
         if (
@@ -197,6 +190,21 @@ def register_fastapi_routes(
     _configure_openapi_security(app, ctx.auth)
 
     return pipelines
+
+
+def _route_body_model(ctx: RuntimeContext, route: RuntimeRouteDescriptor) -> type[BaseModel] | None:
+    """The documented body: the DTO a request binding names, else the record payload of a generated operation."""
+    if route.body_dto is not None:
+        return dto_pydantic_model(route.body_dto, route.operation)
+    if route.handler is not None or route.collection is None:
+        return None
+    if ctx.session.uses_cookie and route.operation == "refresh":
+        return None
+    return create_pydantic_model(
+        ctx.collections[route.collection],
+        route.operation,
+        ctx.auth.identity_collections.get(route.collection),
+    )
 
 
 def _openapi_extra(
@@ -647,13 +655,19 @@ def _build_endpoint(
     *,
     uses_cookie: bool = False,
 ):
-    """An endpoint passing the raw JSON body to ``pipeline``, which validates it after the access checks."""
+    """An endpoint passing the raw JSON body to ``pipeline``, which validates it after the access checks.
+
+    A generated record or login body must be a JSON object; a handler or custom
+    operation reads a malformed one as no body, as every generated backend does.
+    """
+    reads_record = body_model is not None and route.handler is None and route.operation in _RECORD_BODIES
+    read = json_body if reads_record else _json_body
 
     async def endpoint(request: Request) -> Any:
         return await _run_pipeline(
             pipeline=pipeline,
             request=request,
-            body=await (_json_body if body_model is None else json_body)(request),
+            body=await read(request),
             uses_cookie=uses_cookie,
             operation=route.operation,
         )

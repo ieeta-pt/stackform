@@ -46,7 +46,7 @@ from .repositories import (
     RepositoryUpdateStep,
 )
 from .services import ServiceInputStep
-from .validation import ValidateBodyStep
+from .validation import ConformDtoStep, ValidateBodyStep
 
 __all__ = [
     "HandlerStep",
@@ -66,6 +66,7 @@ __all__ = [
     "JWKSStep",
     "LoginStep",
     "RefreshStep",
+    "ConformDtoStep",
     "ValidateBodyStep",
     "RepositoryListStep",
     "RepositoryGetStep",

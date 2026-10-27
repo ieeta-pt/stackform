@@ -33,6 +33,11 @@ entities:
       id: {{ type: id }}
       title: {{ type: string, required: true }}
       createdAt: {{ type: datetime }}
+  draft:
+    fields:
+      id: {{ type: id }}
+      title: {{ type: string, required: true }}
+      retiredAt: {{ type: datetime }}
 repositories:
   users: {{ entity: user }}
   notes:
@@ -41,8 +46,10 @@ repositories:
     ttl: {{ field: createdAt, seconds: 3600 }}
     operations:
 {operations}
+  drafts: {{ entity: draft, softDelete: retiredAt }}
 services:
   users: {{ repository: users }}
+  drafts: {{ repository: drafts }}
   notes: {{ repository: notes }}
   everything: {{ repository: notes, operation: everything }}
 {services}
@@ -56,6 +63,11 @@ controllers:
       update:  {{ service: notes, method: PATCH, path: "/{{id}}", access: public }}
       replace: {{ service: notes, method: PUT, path: "/{{id}}", access: public }}
       delete:  {{ service: notes, method: DELETE, path: "/{{id}}", access: public }}
+  drafts:
+    base_path: /drafts
+    routes:
+      create: {{ service: drafts, method: POST, path: "", access: public }}
+      update: {{ service: drafts, method: PATCH, path: "/{{id}}", access: public }}
   guarded:
     base_path: /guarded
     routes:
@@ -153,7 +165,8 @@ def _recently() -> str:
 
 
 def exercise(client: httpx.Client, notes: NotesTable) -> None:
-    """Removed and expired notes vanish from every CRUD operation, and only a permitted delete removes a note."""
+    """Removed and expired notes vanish from every CRUD operation, only a permitted delete removes a note,
+    and no request body writes a removal timestamp, declared by the entity or not."""
     ids = {title: _create(client, title, _recently()) for title in ("kept", "removed", "guarded")}
     ids["expired"] = _create(client, "expired", EXPIRED)
     removed, expired, kept = ids["removed"], ids["expired"], ids["kept"]
@@ -179,6 +192,14 @@ def exercise(client: httpx.Client, notes: NotesTable) -> None:
     )
     assert all(400 <= write().status_code < 500 for write in writes)
     assert notes.rows().items() >= _STORED.items()
+
+    draft = client.post("/api/drafts", json={"title": "draft"})
+    assert draft.status_code == 200, draft.text
+    retirements = (
+        partial(client.post, "/api/drafts", json={"title": "sneaky", "retiredAt": stamped}),
+        partial(client.patch, f"/api/drafts/{draft.json()['id']}", json={"retiredAt": stamped}),
+    )
+    assert [retire().status_code for retire in retirements] == [422, 422]
     assert sorted(note["title"] for note in client.get("/api/notes").json()) == ["guarded", "kept"]
 
 

@@ -2,7 +2,8 @@
 
 A repository operation's query resolves ``$<symbol>`` references against the
 slugs of the routes that reach it; nothing else is ambient (there is no
-principal or request root). Access-rule ``where`` and ``bind`` expressions
+principal or request root). An abstract repository's operations resolve in
+every repository extending it, which inherits them. Access-rule ``where`` and ``bind`` expressions
 resolve references against the same pre-authorization namespace: route slugs
 plus identity and request symbols declared by that rule's ``given:`` mapping.
 Document symbols are unavailable until their fetch completes. Any other free
@@ -148,7 +149,7 @@ def _validate_repository_filters(spec: dict[str, Any]) -> list[ConfigError]:
     sites = _repository_filter_sites(spec)
     errors: list[ConfigError] = []
     for repo_name, repo in (spec.get("repositories") or {}).items():
-        if not isinstance(repo, dict):
+        if not isinstance(repo, dict) or repo.get("abstract"):
             continue
         for op_name, op in (repo.get("operations") or {}).items():
             if not isinstance(op, dict) or not isinstance(op.get("query"), dict):

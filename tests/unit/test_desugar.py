@@ -25,6 +25,7 @@ def _parse(yaml_str: str, tmp_path) -> object:
 
 def _base_config() -> dict:
     return {
+        "version": "0.2",
         "api": {
             "basePath": "/api",
             "version": "v1",

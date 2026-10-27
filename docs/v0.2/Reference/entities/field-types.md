@@ -84,7 +84,7 @@ bio: { type: string, default: "" }
 
 ## `type: number`
 
-Integer or floating-point number. A boolean is not a number.
+Integer or floating-point number. A boolean is not a number. A value is stored and returned as it was sent: `5` comes back as `5` and `5.5` as `5.5`, on every backend and datastore.
 
 ```yaml
 age: { type: number }

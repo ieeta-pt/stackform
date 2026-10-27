@@ -33,17 +33,19 @@ repositories:
   users: { entity: user, crud: [create] }
   countable:
     abstract: true
+    crud: [list, get, create, update, replace]
     operations:
       countAll:
         query: { sql: "SELECT count(*) AS total FROM tasks" }
-  tasks:
-    entity: task
-    extends: countable
-    operations:
       byTitle:
         query:
           sql: "SELECT title FROM tasks WHERE title = :title"
           params: { title: $title }
+  tasks:
+    entity: task
+    extends: countable
+    operations:
+      featured: { handler: hooks.echo }
       scores:
         query:
           sql: "SELECT score FROM tasks WHERE title = :title"
@@ -68,12 +70,19 @@ services:
       delete: false
       countAll: true
       echo: { handler: hooks.echo }
+      refuse: { handler: hooks.echo }
+  featuring:
+    abstract: true
+    extends: auditable
+    operations:
+      featured: true
   tasks:
     repository: tasks
-    extends: auditable
+    extends: featuring
     operations:
       byTitle: true
       scores: true
+      refuse: { handler: hooks.refuse }
   notes: { repository: notes }
   titles:
     repository: titles
@@ -94,6 +103,8 @@ controllers:
     operations:
       countAll: { method: GET, path: /stats/count }
       echo: { method: POST, path: "/echo/{id}", access: "*" }
+      refuse: { method: POST, path: "/refuse/{id}" }
+      featured: { method: GET, path: "/featured/{id}" }
       byTitle: { method: GET, path: "/by-title/{title}" }
       scores: { method: GET, path: "/scores/{title}" }
   notes:

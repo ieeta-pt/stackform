@@ -40,10 +40,13 @@ entities:
       retiredAt: {{ type: datetime }}
 repositories:
   users: {{ entity: user }}
-  notes:
-    entity: note
+  removable:
+    abstract: true
     softDelete: deletedAt
     ttl: {{ field: createdAt, seconds: 3600 }}
+  notes:
+    entity: note
+{lifecycle}
     operations:
 {operations}
   drafts: {{ entity: draft, softDelete: retiredAt }}
@@ -82,8 +85,15 @@ controllers:
 VERSIONS = ("0.2", "0.3")
 """The grammar versions declaring repository softDelete and ttl."""
 
+LIFECYCLES = {
+    "declared": "    softDelete: deletedAt\n    ttl: { field: createdAt, seconds: 3600 }",
+    "inherited": "    extends: removable",
+}
+"""The notes repository declaring its soft deletion and expiry, or inheriting them from an abstract repository."""
+
 sql_spec = partial(
     _SPEC.format,
+    lifecycle=LIFECYCLES["declared"],
     storage='datastores:\n  store: { type: postgres, dsn: "${SQL_DSN}", default: true }',
     operations='      everything: { includeDeleted: true, query: { sql: "SELECT * FROM notes" } }',
     services="",
@@ -92,6 +102,7 @@ sql_spec = partial(
 
 mongo_spec = partial(
     _SPEC.format,
+    lifecycle=LIFECYCLES["declared"],
     storage="mongo:\n  uri: ${MONGO_URI:-mongodb://localhost:27017}\n  database: ${MONGO_DB:-notes}",
     operations=(
         "      everything: { includeDeleted: true, query: { command: find, filter: {} } }\n"

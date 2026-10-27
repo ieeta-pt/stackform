@@ -6,3 +6,7 @@ async def echo(request):
         "principal": request.principal,
         "inputs": request.inputs,
     }
+
+
+def refuse(request):
+    raise ValueError(f"Refused {request.params['id']}")

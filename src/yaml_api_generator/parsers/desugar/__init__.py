@@ -5,6 +5,7 @@ from .entity_desugarer import EntityDesugarer
 from .inheritance_desugarer import InheritanceDesugarer
 from .service_desugarer import ServiceDesugarer
 from .controller_desugarer import ControllerDesugarer
+from ..yaml_parser import SPEC_SCHEMAS
 
 _REPO_DESUGARER = InheritanceDesugarer("repository")
 _SVC_DESUGARER = InheritanceDesugarer("service")
@@ -42,14 +43,15 @@ def desugar_v02(config: dict[str, Any]) -> dict[str, Any]:
     services = config.get("services", {})
     controllers = config.get("controllers", {})
 
+    schema = SPEC_SCHEMAS[str(config["version"])]
     EntityDesugarer().desugar(entities, repositories)
     routes = {
         f"controllers.{name}.routes.{route_name}": route
         for name, ctrl in controllers.items() if isinstance(ctrl, dict)
         for route_name, route in (ctrl.get("routes") or {}).items()
     }
-    _REPO_DESUGARER.desugar(repositories, _bindings(controllers=controllers, services=services))
-    _SVC_DESUGARER.desugar(services, {**_bindings(controllers=controllers), **routes})
+    _REPO_DESUGARER.desugar(repositories, _bindings(controllers=controllers, services=services), schema)
+    _SVC_DESUGARER.desugar(services, {**_bindings(controllers=controllers), **routes}, schema)
     ServiceDesugarer().desugar(services, repositories, entities, defaults, auth_defaults)
     ControllerDesugarer().desugar(controllers, services)
 

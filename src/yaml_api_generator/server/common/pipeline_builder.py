@@ -327,5 +327,7 @@ class PipelineBuilder:
 
         query = self._ctx.operations[collection_name][operation].query
         return RepositoryOperationStep(
-            collection_name, with_identity(query, id_field, collection.id_format), id_field
+            query.get("collection", collection_name),
+            with_identity(query, id_field, collection.id_format),
+            id_field,
         )

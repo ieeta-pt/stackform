@@ -947,6 +947,12 @@
           "type": "boolean"
         }
       },
+      "allOf": [
+        {
+          "oneOf": [{ "required": ["query"] }, { "required": ["handler"] }],
+          "errorMessage": "an operation declares exactly one of 'query' or 'handler'"
+        }
+      ],
       "dependentRequired": {
         "includeDeleted": ["query"]
       }
@@ -964,6 +970,16 @@
           "minimum": 1
         }
       }
+    },
+    "StandaloneRepositoryLifecycleRules": {
+      "description": "Lifecycle rules of a repository declared on its own; an abstract or extending repository is checked once its inheritance is merged.",
+      "if": {
+        "anyOf": [
+          { "required": ["extends"] },
+          { "required": ["abstract"], "properties": { "abstract": { "const": true } } }
+        ]
+      },
+      "else": { "$ref": "#/$defs/RepositoryLifecycleRules" }
     },
     "RepositoryLifecycleRules": {
       "dependentRequired": {
@@ -1071,7 +1087,7 @@
     "RepositoryConfig": {
       "type": "object",
       "additionalProperties": false,
-      "allOf": [{ "$ref": "#/$defs/RepositoryLifecycleRules" }],
+      "allOf": [{ "$ref": "#/$defs/StandaloneRepositoryLifecycleRules" }],
       "properties": {
         "softDelete": {
           "type": "string"

@@ -1,6 +1,6 @@
 ---
 title: "Tutorial 09: Custom Operations"
-description: Custom operations with handler functions (e.g. publishing a note), wiring imports, and the two handler contracts.
+description: Custom operations with handler functions (e.g. publishing a note), wiring imports, and the handler contract.
 ---
 
 **Concept introduced:** Custom operations backed by handler functions (for example, publishing a note) that do not map to plain create/update/delete.
@@ -136,78 +136,33 @@ Notes on this spec:
 - `register`/`login` routes are not generated unless you enable them with `api.operations.auth`, as shown above.
 - `access: "*"` means any logged-in user; `public` means no auth; `moderator` is an exact role match; the `given`/`when` rule is an ownership check.
 
-## Two handler contracts
+## Handler contract
 
-The handler signature depends on the target you generate or run. Write the version that matches how you ship the app.
-
-### Generated backends: request object
-
-`stackform build myapp.yaml backend` emits a route that awaits the handler with
-the target's request object. FastAPI supplies `fastapi.Request`, DRF supplies its
-request, and raw-ASGI supplies a request-compatible object with `path_params`,
-`body`, `headers`, and `state`. Read inputs from that object and return a
-JSON-serializable value (or a DRF `Response` in the DRF target).
+`stackform run` and every generated backend (FastAPI, DRF, raw ASGI) call the
+handler the same way: with one request object, sending its return value as the
+JSON response body.
 
 ```python
 # myapp/handlers/notes.py
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, Request
 
-from repositories.notes import NotesRepository
-from dependencies.mongodb import get_database
-
-
-async def publish(request: Request):
-    note_id = request.path_params["id"]
-    repo = NotesRepository(get_database())
-    doc = await repo.get(note_id)
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Note not found")
-    if doc["published"]:
-        raise HTTPException(status_code=409, detail="Already published")
-    return await repo.update(
-        note_id,
-        {"published": True, "publishedAt": datetime.now(timezone.utc).isoformat()},
-    )
+async def publish(request):
+    if request.body.get("draft"):
+        raise ValueError("Cannot publish a draft")
+    return {
+        "id": request.params["id"],
+        "published": True,
+        "publishedAt": datetime.now(timezone.utc).isoformat(),
+        "by": request.principal["sub"],
+    }
 ```
 
-Raise `HTTPException` for controlled error responses. Any other uncaught exception becomes a 500. The custom-op route on the FastAPI backend does not run the CRUD access pipeline, so if the action must be restricted, enforce it inside the handler (resolve the principal and check it yourself).
-
-### `stackform run` dev server: `context: RequestContext`
-
-The in-process dev server invokes the handler as a pipeline step. It receives and returns a `RequestContext`: read inputs from the context, set `context.response`, and return the context.
-
-```python
-# myapp/handlers/notes.py (dev-server variant)
-from datetime import datetime, timezone
-
-from yaml_api_generator.server.common.steps import NotFoundError
-
-
-async def publish(context):
-    note_id = context.url_params["id"]
-    doc = await context.repository.get(note_id)
-    if doc is None:
-        raise NotFoundError("Note not found")
-    if doc["published"]:
-        raise ValueError("Already published")
-    context.response = await context.repository.update(
-        note_id,
-        {"published": True, "publishedAt": datetime.now(timezone.utc).isoformat()},
-    )
-    return context
-```
-
-`RequestContext` fields available to a handler:
-
-- `context.repository` -- the repository bound to this service's collection.
-- `context.url_params` -- path parameters, for example `context.url_params["id"]`.
-- `context.body` -- the parsed JSON body, or `None`.
-- `context.headers` -- the request headers.
-- `context.principal` -- a dict for the authenticated user (or `None` on public routes): `principal["sub"]`, `principal["identity_collection"]`, `principal["record"]` (the user document with `_auth` and `password` stripped), and `principal["roles"]` when a roles field is configured. It is a plain dict, not an object with attributes.
-
-There is no `context.now()`; build timestamps yourself. Raise `NotFoundError` (imported from `yaml_api_generator.server.common.steps`) for a 404, or a plain `ValueError` for a 422. Under `run`, a non-public custom route resolves the principal and applies its access rules before your handler runs.
+The request carries `params` (path parameters), `query`, `headers`, `cookies`,
+`body` (the JSON body, or `{}`), `principal` (a plain dict, or `None` on public
+routes) and `inputs` (the service's `with:` values). The handler owns its data
+access. Raise `ValueError` for a 422; any other exception answers 500. The route's
+access rules run before the handler.
 
 > **Enforcement**
 >
@@ -232,9 +187,9 @@ repositories:
           filter: { published: true }
 ```
 
-Supported `query.command` values are `find`, `findOne`, `aggregate`, `countDocuments`, and `estimatedDocumentCount`. `find`/`findOne`/`countDocuments` require a `filter`; `aggregate` requires a `pipeline`. A repository with no `entity` may set `query.collection` to target a collection explicitly (otherwise `QUERY_MISSING_COLLECTION`). A repository-level operation that has neither `query` nor `handler` fails with `OPERATION_MISSING_QUERY_OR_HANDLER`.
+Supported `query.command` values are `find`, `findOne`, `aggregate`, `countDocuments`, and `estimatedDocumentCount`. `find`/`findOne`/`countDocuments` require a `filter`; `aggregate` requires a `pipeline`. A repository with no `entity` may set `query.collection` to target a collection explicitly (otherwise `QUERY_MISSING_COLLECTION`). A repository-level operation declares exactly one of `query` or `handler`; neither or both fails schema validation (`SCHEMA_VALIDATION_ERROR`).
 
-A repository `operations.<op>.handler` is a second handler kind: it is invoked as `await <handler>(**kwargs)` with the call's arguments, rather than receiving a `Request` or `context`. Use the service/controller handler (above) for HTTP-shaped operations and the repository handler for data-access building blocks.
+A repository `operations.<op>.handler` receives the same request object as a service handler.
 
 ## What the custom operation generates
 
@@ -250,11 +205,11 @@ Custom-operation routes are emitted by the FastAPI, DRF, and raw-ASGI targets.
 
 - `handler:` on a service operation points to `<alias>.<function>`, resolved through `imports:`.
 - Custom operations require `method` and `path` on the controller operation; there is no inference.
-- Generated targets pass their request object; `stackform run` passes a `RequestContext`.
+- Every target and `stackform run` pass the handler the same request object.
 - For a plain parameterized read, prefer a repository `query` operation over a handler.
 - Custom operations use the same access vocabulary as CRUD, and every target (`run`, FastAPI, raw ASGI and DRF) enforces the rules before your handler runs. A bare `document:` binding loads the record named by the route's `{id}` parameter.
 
 ## See Also
 
-- [Handler Context Reference](../Reference/services/handler-context.md) -- the `RequestContext` object and the `run` dev-server handler contract.
-- [Custom operations reference](../Reference/services/custom-operations.md) -- the FastAPI/raw `Request` handler contract and import resolution.
+- [Handler Context Reference](../Reference/services/handler-context.md) -- every attribute of the handler's request object.
+- [Custom operations reference](../Reference/services/custom-operations.md) -- custom operation routes and import resolution.

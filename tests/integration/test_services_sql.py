@@ -88,6 +88,19 @@ def test_operation_disabled_by_the_abstract_service_is_not_routed(api):
     assert api.delete(f"/api/tasks/{task['id']}").status_code == 405
 
 
+def test_repository_handler_operation_receives_the_request(api):
+    response = api.get("/api/tasks/featured/t1?page=2")
+    assert response.status_code == 200, response.text
+    assert response.json()["params"] == {"id": "t1"}
+    assert response.json()["query"] == {"page": "2"}
+
+
+def test_child_service_override_replaces_the_inherited_handler(api):
+    response = api.post("/api/tasks/refuse/t1")
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Refused t1"}
+
+
 def test_repository_crud_limits_the_routes(api):
     assert api.get("/api/notes/n1").status_code == 404
     assert api.get("/api/notes").status_code == 405
@@ -120,3 +133,12 @@ def test_numbers_keep_their_json_type_through_crud_and_declared_operations(api):
     assert api.get(f"/api/tasks/{created['id']}").json()["score"] == 2.5
     assert api.get(f"/api/tasks/scores/{title}").json() == [{"score": 2.5}]
     assert type(api.get("/api/tasks/stats/count").json()[0]["total"]) is int
+
+
+def test_an_integer_number_stays_an_integer_through_crud_and_declared_operations(api):
+    title = uuid4().hex
+    created = api.post("/api/tasks", json={"title": title, "score": 200}).json()
+    [listed] = [task for task in api.get("/api/tasks").json() if task["title"] == title]
+    [queried] = api.get(f"/api/tasks/scores/{title}").json()
+    scores = [created["score"], api.get(f"/api/tasks/{created['id']}").json()["score"], listed["score"], queried["score"]]
+    assert [repr(score) for score in scores] == ["200"] * 4

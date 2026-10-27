@@ -33,7 +33,7 @@ def _load(spec: dict, tmp_path: Path):
 @pytest.mark.parametrize("name", ["insert", "paginate", "find_one", "run_operation", "get_by", "upsert_by", "class"])
 @pytest.mark.parametrize(("section", "owner", "old"), [
     ("repositories", "tasks", "retitle"),
-    ("services", "tasks", "echo"),
+    ("services", "tasks", "refuse"),
     ("controllers", "tasks", "echo"),
 ])
 def test_operation_named_after_a_generated_member_is_rejected(tmp_path, section, owner, old, name):

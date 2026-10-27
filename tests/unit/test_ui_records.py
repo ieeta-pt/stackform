@@ -57,8 +57,6 @@ entities:
     fields: *rows
   feed:
     fields: *rows
-  stream:
-    fields: *rows
   note:
     fields:
       id: { type: id }
@@ -71,7 +69,6 @@ repositories:
   ledgers: { entity: ledger }
   pages: { entity: page }
   feeds: { entity: feed }
-  streams: { entity: stream }
   notes: { entity: note }
 
 services:
@@ -79,7 +76,6 @@ services:
   ledgers: { repository: ledgers }
   pages: { repository: pages }
   feeds: { repository: feeds }
-  streams: { repository: streams }
   notes: { repository: notes }
 
 controllers:
@@ -121,16 +117,6 @@ controllers:
           size: { default: 2, max: 3 }
           sort: [{ field: rank, dir: desc }, { field: code, dir: asc }]
           envelope: true
-  streams:
-    service: streams
-    base_path: /stream
-    access: public
-    operations:
-      list:
-        pagination:
-          strategy: keyset
-          size: { default: 2, max: 3 }
-          sort: [{ field: rank, dir: desc }, { field: code, dir: asc }]
   notes:
     service: notes
     base_path: /notes
@@ -164,7 +150,7 @@ const send = (entity, operation, { body, ...request } = {}) =>
 const entered = (fields, inputs) => payload(fields, { ...formValues(fields), ...inputs });
 
 const report = {};
-for (const entity of ['ledger', 'page', 'feed', 'stream']) {
+for (const entity of ['ledger', 'page', 'feed']) {
   for (const rank of [0, 1, 2, 3, 4, 5, 6]) await send(entity, 'create', { body: { code: `c${rank}`, rank } });
   report[entity] = (await listRecords(entity)).map((row) => row.code);
 }
@@ -293,7 +279,6 @@ def test_pagination_comes_from_the_list_route(project):
         "ledger": ("offset", False),
         "page": ("offset", True),
         "feed": ("keyset", True),
-        "stream": ("keyset", False),
     }
 
 
@@ -447,7 +432,6 @@ def test_generated_data_layer_drives_every_server(project, tmp_path, server):
         "ledger": every_row,
         "page": every_row,
         "feed": every_row,
-        "stream": every_row,
         "updated": 99,
         "ledgerAfterEdit": 7,
         "fetched": 99,

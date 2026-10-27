@@ -104,7 +104,7 @@ class RepositoryTransformer:
                 if binding_error is not None:
                     errors.append(binding_error)
 
-            if crud_raw is not None and entity is None:
+            if crud_raw is not None and entity is None and not abstract:
                 errors.append(ConfigError(
                     code="CRUD_WITHOUT_ENTITY",
                     message=f"Repository '{repo_name}' specifies 'crud' but has no 'entity'",
@@ -131,22 +131,16 @@ class RepositoryTransformer:
                 query = op_cfg.get("query")
                 handler = op_cfg.get("handler")
 
-                if query is None and handler is None:
-                    errors.append(ConfigError(
-                        code="OPERATION_MISSING_QUERY_OR_HANDLER",
-                        message=f"Operation '{op_name}' in repository '{repo_name}' must have 'query' or 'handler'",
-                        path=f"repositories.{repo_name}.operations.{op_name}",
-                    ))
-                    continue
-
                 if query is not None:
-                    ds_type = (datastore_types or {}).get(datastore)
+                    target = (collections or {}).get(query.get("collection"))
+                    queried = getattr(target, "datastore", None) or datastore
+                    ds_type = (datastore_types or {}).get(queried)
                     op_path = f"repositories.{repo_name}.operations.{op_name}.query"
                     if "sql" in query:
                         if ds_type in ("mongodb", "mongo"):
                             errors.append(ConfigError(
                                 code="QUERY_FORM_MISMATCH",
-                                message=f"Operation '{op_name}' uses a SQL query but datastore '{datastore}' is MongoDB",
+                                message=f"Operation '{op_name}' uses a SQL query but datastore '{queried}' is MongoDB",
                                 path=f"{op_path}.sql",
                             ))
                         elif not isinstance(query.get("sql"), str) or not query["sql"].strip():
@@ -158,7 +152,7 @@ class RepositoryTransformer:
                     elif ds_type in ("postgres", "postgresql"):
                         errors.append(ConfigError(
                             code="QUERY_FORM_MISMATCH",
-                            message=f"Operation '{op_name}' uses a MongoDB command but datastore '{datastore}' is relational; use 'sql'",
+                            message=f"Operation '{op_name}' uses a MongoDB command but datastore '{queried}' is relational; use 'sql'",
                             path=f"{op_path}.command",
                         ))
                     else:

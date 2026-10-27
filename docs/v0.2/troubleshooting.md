@@ -51,8 +51,8 @@ Common codes:
   `create`, `update`, `replace`, `delete`.
 - `ID_FIELD_MISSING` / `ID_FIELD_MULTIPLE` -- an entity must declare exactly one
   `type: id` field (or a natural `pk:`). Zero or two `id` fields are rejected.
-- `OPERATION_MISSING_QUERY_OR_HANDLER` -- a custom `repositories.<name>.operations.<op>`
-  declares neither a `query:` nor a `handler:`.
+- `SCHEMA_VALIDATION_ERROR` "an operation declares exactly one of 'query' or 'handler'"
+  -- a custom `repositories.<name>.operations.<op>` declares neither or both.
 - `QUERY_COMMAND_UNKNOWN` / `QUERY_MISSING_FIELD` / `QUERY_MISSING_COLLECTION` /
   `QUERY_COLLECTION_NOT_FOUND` -- a query op uses an unknown command, lacks a field its
   command needs, targets no collection (the repository has no entity and no

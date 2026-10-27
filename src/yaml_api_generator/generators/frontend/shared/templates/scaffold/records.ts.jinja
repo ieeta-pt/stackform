@@ -11,7 +11,6 @@ interface Paging {
   strategy: 'offset' | 'keyset';
   size: number;
   envelope: boolean;
-  sort: string[];
 }
 
 interface Projection {
@@ -40,7 +39,6 @@ const PAGING: Record<string, Paging> = {
     strategy: {{ entity.pagination.strategy | tojson }},
     size: {{ entity.pagination.size.max }},
     envelope: {{ entity.pagination.envelope | tojson }},
-    sort: {{ entity.pagination.sort | map(attribute='field') | list | tojson }},
   },
 {% endfor %}
 };
@@ -115,20 +113,12 @@ export async function failure(res: Response, fallback: string): Promise<Error> {
   return new Error(described(detail) || fallback);
 }
 
-function cursor(row: Row, sort: string[]): string {
-  const bytes = new TextEncoder().encode(JSON.stringify(sort.map((field) => row[field] ?? null)));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_');
-}
-
 type Advance = (paging: Paging, body: any, rows: Row[], query: Query) => Query | null;
 
 const ADVANCE: Record<Paging['strategy'], Advance> = {
   offset: (paging, _body, rows, query) =>
     rows.length < paging.size ? null : { ...query, offset: String(Number(query.offset ?? 0) + rows.length) },
-  keyset: (paging, body, rows, query) => {
-    if (paging.envelope) return body.next ? { ...query, after: body.next } : null;
-    return rows.length < paging.size ? null : { ...query, after: cursor(rows[rows.length - 1], paging.sort) };
-  },
+  keyset: (_paging, body, _rows, query) => (body.next ? { ...query, after: body.next } : null),
 };
 
 /** Every record the list operation serves, following its pagination to the last page. */

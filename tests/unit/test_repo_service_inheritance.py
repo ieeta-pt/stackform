@@ -8,6 +8,7 @@ of that generated class. Nothing is hand-written and nothing is flattened.
 import textwrap
 
 import pytest
+import yaml
 
 from yaml_api_generator.parsers.desugar import desugar_v02
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors, load_and_generate_ir
@@ -20,6 +21,7 @@ from tests.conftest import VALID_DIR
 
 def _base_config() -> dict:
     return {
+        "version": "0.2",
         "api": {
             "basePath": "/api",
             "version": "v1",
@@ -39,6 +41,10 @@ def _parse(yaml_str: str, tmp_path):
     path = tmp_path / "test.yaml"
     path.write_text(textwrap.dedent(yaml_str))
     return load_and_generate_ir(str(path)).ir
+
+
+def _load(config: dict, tmp_path):
+    return _parse(yaml.safe_dump(config), tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -264,3 +270,45 @@ def test_route_targeting_abstract_service_raises():
     with pytest.raises(ConfigErrors) as exc_info:
         desugar_v02(config)
     assert [e.path for e in exc_info.value.errors if e.code == "DESUGAR_ABSTRACT_SERVICE_BOUND"] == ["controllers.stats.routes.count.service"]
+
+
+def test_abstract_repository_operation_binds_the_extending_route_parameters(tmp_path):
+    config = _base_config()
+    config["repositories"]["base"] = {"abstract": True, "operations": {"byTitle": {"query": {"command": "find", "filter": {"title": "$title"}}}}}
+    config["repositories"]["posts"]["extends"] = "base"
+    config["services"]["posts"]["operations"] = {"byTitle": True}
+    config["controllers"]["posts"]["operations"] = {"byTitle": {"method": "GET", "path": "/by-title/{title}"}}
+    assert _load(config, tmp_path).repositories["posts"].operations["byTitle"].query["filter"] == {"title": "$title"}
+
+
+def test_abstract_repository_crud_and_operations_are_inherited(tmp_path):
+    config = _base_config()
+    config["repositories"]["base"] = {
+        "abstract": True,
+        "crud": ["list", "get"],
+        "operations": {"countAll": {"query": {"command": "estimatedDocumentCount"}}},
+    }
+    config["repositories"]["posts"]["extends"] = "base"
+    posts = _load(config, tmp_path).repositories["posts"]
+    assert (posts.crud, set(posts.operations)) == (("list", "get"), {"countAll"})
+
+
+def test_service_chain_inherits_every_level_and_its_own_operation_wins(tmp_path):
+    config = _base_config()
+    config["services"]["root"] = {"abstract": True, "operations": {"publish": {"handler": "ops.root"}, "archive": {"handler": "ops.root"}}}
+    config["services"]["middle"] = {"abstract": True, "extends": "root", "operations": {"delete": False}}
+    config["services"]["posts"] |= {"extends": "middle", "operations": {"archive": {"handler": "ops.posts"}}}
+    config["controllers"]["posts"]["operations"] = {
+        name: {"method": "POST", "path": f"/{{id}}/{name}"} for name in ("publish", "archive")
+    }
+    services = desugar_v02(config)["services"]
+    assert "delete-posts" not in services
+    assert (services["publish-posts"]["handler"], services["archive-posts"]["handler"]) == ("ops.root", "ops.posts")
+
+
+def test_service_switching_an_operation_its_repository_lacks_raises():
+    config = _base_config()
+    config["services"]["posts"]["operations"] = {"lsit": False}
+    with pytest.raises(ConfigErrors) as exc_info:
+        desugar_v02(config)
+    assert [e.path for e in exc_info.value.errors if e.code == "DESUGAR_SERVICE_OPERATION_UNKNOWN"] == ["services.posts.operations.lsit"]

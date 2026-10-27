@@ -31,15 +31,17 @@ repositories:
   users: { entity: user, crud: [create] }
   countable:
     abstract: true
+    crud: [list, get, create, update, replace]
     operations:
       countAll:
         query: { command: countDocuments, filter: {} }
+      byTitle:
+        query: { command: find, filter: { title: $title } }
   tasks:
     entity: task
     extends: countable
     operations:
-      byTitle:
-        query: { command: find, filter: { title: $title } }
+      featured: { handler: hooks.echo }
       notesByBody:
         query: { command: find, collection: notes, filter: { body: $text } }
       retitle:
@@ -60,16 +62,27 @@ repositories:
 
 services:
   users: { repository: users }
+  echoing:
+    abstract: true
+    operations:
+      echo: { handler: hooks.echo }
+      refuse: { handler: hooks.echo }
+  counting:
+    abstract: true
+    extends: echoing
+    operations:
+      countAll: true
+      featured: true
   tasks:
     repository: tasks
+    extends: counting
     operations:
       byTitle: true
       notesByBody: true
       retitle: true
       seed: true
       plant: true
-      countAll: true
-      echo: { handler: hooks.echo }
+      refuse: { handler: hooks.refuse }
   notes: { repository: notes }
   sized:
     handler: hooks.echo
@@ -92,6 +105,8 @@ controllers:
       seed: false
       plant: false
       countAll: false
+      featured: false
+      refuse: false
       echo: { method: POST, path: "/echo/{id}" }
   sizes:
     routes:
@@ -113,6 +128,8 @@ controllers:
       seed: { method: POST, path: "/seed/{title}" }
       plant: { method: POST, path: "/plant/{title}" }
       echo: { method: POST, path: "/echo/{id}" }
+      refuse: { method: POST, path: "/refuse/{id}" }
+      featured: { method: GET, path: "/featured/{id}" }
       countAll: { method: GET, path: /stats }
   notes:
     service: notes

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..yaml_parser import ConfigError, ConfigErrors
+from ..yaml_parser import ConfigError, ConfigErrors, validate_schema
 
 _UNINHERITED = frozenset({"abstract", "extends"})
 
@@ -18,37 +18,59 @@ class InheritanceDesugarer:
     def __init__(self, layer: str) -> None:
         self._layer = layer
 
-    def desugar(self, entries: dict[str, Any], bindings: dict[str, dict[str, Any]]) -> None:
+    def desugar(
+        self, entries: dict[str, Any], bindings: dict[str, dict[str, Any]], schema: str
+    ) -> None:
         """Validate inheritance and fold every ancestor into the entries extending it.
 
         Every ``extends`` target must exist and be abstract, chains must not
         cycle and no binding may reference an abstract entry. Each extending
         entry receives its ancestors' configuration: its own keys win and
-        ``operations`` merge per operation. ``_inherits`` names the nearest
-        ancestor declaring ``operations``, rendered as the generated class the
-        entry subclasses. Abstract entries without operations are dropped.
+        ``operations`` merge per operation. The merged entry must satisfy the
+        layer's schema definition as if it were declared standalone.
+        ``_inherits`` names the nearest ancestor declaring ``operations``,
+        rendered as the generated class the entry subclasses. Abstract entries
+        without operations are dropped.
 
         Args:
             entries: The layer's config dict (repositories or services).
             bindings: Each config path whose ``<layer>`` key references an entry,
                 mapped to the config at that path.
+            schema: Id of the spec schema holding the layer's ``<Layer>Config`` definition.
 
         Raises:
-            ConfigErrors: On a missing or non-abstract target, a cycle or a bound abstract entry.
+            ConfigErrors: On a missing or non-abstract target, a cycle, a bound
+                abstract entry or a merged entry its schema rejects.
         """
         self._validate(entries)
         self._validate_no_cycles(entries)
         self._validate_not_bound(entries, bindings)
-        entries.update({
-            name: {**self._merged(name, entries), "_inherits": self._resolve_chain(name, entries)}
+        merged = {
+            name: self._merged(name, entries)
             for name, cfg in entries.items()
             if isinstance(cfg, dict) and cfg.get("extends")
+        }
+        self._validate_merged(merged, schema)
+        entries.update({
+            name: {**cfg, "_inherits": self._resolve_chain(name, entries)}
+            for name, cfg in merged.items()
         })
         for name in [
             name for name, cfg in entries.items()
             if isinstance(cfg, dict) and cfg.get("abstract") and not cfg.get("operations")
         ]:
             del entries[name]
+
+    def _validate_merged(self, merged: dict[str, Any], schema: str) -> None:
+        section = f"{self._layer}s"
+        definition = {"$ref": f"{schema}#/$defs/{self._layer.capitalize()}Config"}
+        errors = validate_schema(
+            {section: {name: {key: value for key, value in cfg.items() if key != "extends"}
+                       for name, cfg in merged.items()}},
+            {"properties": {section: {"additionalProperties": definition}}},
+        )
+        if errors:
+            raise ConfigErrors(errors)
 
     def _validate_not_bound(self, entries: dict[str, Any], bindings: dict[str, dict[str, Any]]) -> None:
         abstract_names = {

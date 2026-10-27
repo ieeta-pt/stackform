@@ -269,7 +269,8 @@ def RepositoryOperationStep(
 ) -> Step:
     async def step(ctx: RequestContext) -> RequestContext:
         bindings = handler_request(ctx).bindings
-        result = await _repository(ctx).run_operation(collection_name, resolve(query, bindings))
+        repository = ctx.repositories.for_collection(collection_name)
+        result = await repository.run_operation(collection_name, resolve(query, bindings))
         ctx.response = present(result, id_field)
         return ctx
 

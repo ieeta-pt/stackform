@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from dependencies.lifecycle import Expiry, Lifecycle
 {% endif %}
 from dependencies.postgres import metadata
-from dependencies.sql_types import IsoDateTime
+from dependencies.sql_types import IsoDateTime, JsonNumber
 from ._sql_ops import SQLRepositoryBase{% for op in operations %}, {{ op | capitalize }}Op{% endfor %}
 
 {% endif %}

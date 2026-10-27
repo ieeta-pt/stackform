@@ -12,7 +12,7 @@ from yaml_api_generator.generators.backend.compile_context import ModelDescripto
 _IMPORTS: dict[str, tuple[str, ...]] = {
     "typing": ("Annotated", "Any", "Literal"),
     "pydantic": ("Field",),
-    "dependencies.payloads": ("OpenPayload", "Payload", "Timestamp", "formatted", "partial"),
+    "dependencies.payloads": ("OpenPayload", "Payload", "Timestamp", "exact_integers", "formatted", "partial"),
 }
 
 
@@ -128,7 +128,8 @@ class PayloadModule:
         listed = ", ".join(f"{key}={value!r}" for key, value in arguments.items())
         field = [f"{self._use('Field')}({listed})"] if arguments else []
         formatted = [f"{self._use('formatted')}({config['format']!r})"] if "format" in config else []
-        metadata = [*field, *formatted]
+        integers = [self._use("exact_integers")] if scalar is float else []
+        metadata = [*field, *formatted, *integers]
         if not metadata:
             return python_type
         return f"{self._use('Annotated')}[{python_type}, {', '.join(metadata)}]"

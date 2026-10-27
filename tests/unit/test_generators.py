@@ -130,7 +130,7 @@ def test_fastapi_payload_module_maps_every_field_type():
     (declaration,) = PayloadModule([model]).declarations
     assert {a.name: a.annotation for a in declaration.attributes} == {
         "s": "str",
-        "n": "Annotated[float, Field(strict=True)]",
+        "n": "Annotated[float, Field(strict=True), exact_integers]",
         "b": "Annotated[bool, Field(strict=True)]",
         "d": "Timestamp",
         "e": "Literal['a', 'b']",

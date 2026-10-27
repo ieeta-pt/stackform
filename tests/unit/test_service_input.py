@@ -20,6 +20,7 @@ from yaml_api_generator.parsers.service_input_parser import (
 )
 from yaml_api_generator.parsers.transformers.symbol_validation import validate_spec_symbols
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors, load_and_generate_ir
+from yaml_api_generator.server.common.repositories.registry import RepositoryRegistry
 from yaml_api_generator.server.common.request_context import RequestContext
 from yaml_api_generator.server.common.steps.repositories import RepositoryOperationStep
 from yaml_api_generator.server.common.steps.services import ServiceInputStep
@@ -378,7 +379,7 @@ async def test_runtime_repository_operation_receives_forwarded_values():
             return query["filter"]
 
     ctx = _ctx({"postId": "p1"})
-    ctx.repository = RecordingRepository()
+    ctx.repositories = RepositoryRegistry.single(RecordingRepository())
     ctx = ServiceInputStep(
         {"postId": {"type": "string"}},
         {

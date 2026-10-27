@@ -34,6 +34,25 @@ class Timestamp(str):
         return {**handler(schema), "format": "date-time"}
 
 
+class ExactIntegers:
+    """``float`` field metadata keeping an integer input an ``int``: 5 is stored and returned as 5, not 5.0.
+
+    It follows the field's constraints in ``Annotated``, so they stay native float constraints.
+    """
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        return core_schema.no_info_wrap_validator_function(
+            self._validate, handler(source), serialization=core_schema.simple_ser_schema("any")
+        )
+
+    @staticmethod
+    def _validate(value: Any, validate: core_schema.ValidatorFunctionWrapHandler) -> Any:
+        number = validate(value)
+        return value if type(value) is int else number
+
+
+exact_integers = ExactIntegers()
+
 SCALAR_TYPES: dict[str, type] = {
     "string": str,
     "id": str,

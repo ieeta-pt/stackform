@@ -10,7 +10,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from yaml_api_generator.ir import IRCollection
-from yaml_api_generator.runtime.sql_types import IsoDateTime
+from yaml_api_generator.runtime.sql_types import IsoDateTime, JsonNumber
 
 _JSON_TYPES = frozenset({"array", "object", "file"})
 
@@ -48,7 +48,7 @@ def column_type(cfg: dict[str, Any]) -> sa.types.TypeEngine:
     if field_type in _JSON_TYPES:
         return sa.JSON()
     if field_type == "number":
-        return sa.Numeric(asdecimal=False)
+        return JsonNumber()
     if field_type == "boolean":
         return sa.Boolean()
     if field_type == "datetime":

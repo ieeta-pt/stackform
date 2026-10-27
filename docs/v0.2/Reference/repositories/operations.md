@@ -78,7 +78,7 @@ services:
 
 ## Custom operations
 
-Custom operations are declared under `repositories.<name>.operations`. An operation name starts with a letter and contains only letters, digits and underscores; it becomes a method of the generated repository and service classes. Each entry needs either a `query:` or a `handler:` (a dotted import path). An entry with neither is reported as `OPERATION_MISSING_QUERY_OR_HANDLER`.
+Custom operations are declared under `repositories.<name>.operations`. An operation name starts with a letter and contains only letters, digits and underscores; it becomes a method of the generated repository and service classes. Each entry declares exactly one of `query:` or `handler:` (a dotted import path); neither or both fails schema validation.
 
 ### Query-backed operations
 
@@ -130,7 +130,7 @@ repositories:
     entity: myOtherEntity
 ```
 
-`collection` must name a concrete repository; anything else is reported as `QUERY_COLLECTION_NOT_FOUND`. A repository with no `entity:` can still declare query operations, but each query must then supply a `collection:`. Omitting both is reported as `QUERY_MISSING_COLLECTION`.
+`collection` must name a concrete repository; anything else is reported as `QUERY_COLLECTION_NOT_FOUND`. The query runs on that repository's datastore, and its form must suit that datastore (`QUERY_FORM_MISMATCH` otherwise). A repository with no `entity:` can still declare query operations, but each query must then supply a `collection:`. Omitting both is reported as `QUERY_MISSING_COLLECTION`.
 
 ### SQL operations
 
@@ -179,7 +179,7 @@ On a repository with `softDelete` or `ttl`, query operations hide removed and ex
 
 ### Handler-backed operations
 
-For logic that a single MongoDB command cannot express, point `handler:` at an async function. The generated repository imports it and calls it as `await handler(**kwargs)`, where the keyword arguments come from the caller:
+For logic that a query cannot express, point `handler:` at a plain or async function instead of declaring a `query:`. It receives the same request object as a service handler and returns the response body; see [Handler context](../services/handler-context.md):
 
 ```yaml
 repositories:

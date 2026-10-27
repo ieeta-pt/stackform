@@ -22,6 +22,7 @@ Environment variable interpolation:
 import json
 import os
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -170,12 +171,20 @@ def validate_schema(config: Any, schema: dict[str, Any]) -> list[ConfigError]:
 
 
 def _schema_message(error: ValidationError) -> str:
-    """A failing subschema's ``errorMessage`` annotation, else the validator's own message."""
-    custom = error.schema.get("errorMessage") if isinstance(error.schema, dict) else None
-    return custom or best_match([error]).message
+    """The ``errorMessage`` annotation nearest the most relevant failure, else that failure's own message."""
+    best = best_match([error])
+    annotations = (node.schema.get("errorMessage") for node in _lineage(best) if isinstance(node.schema, dict))
+    return next(filter(None, annotations), best.message)
 
 
-_VERSION_SCHEMA_MAP: dict[str, str] = {
+def _lineage(error: ValidationError | None) -> Iterator[ValidationError]:
+    """``error`` and the errors enclosing it, innermost first."""
+    while error is not None:
+        yield error
+        error = error.parent
+
+
+SPEC_SCHEMAS: dict[str, str] = {
     "0.1": "yaml-spec-v0.1.schema.json",
     "0.2": "yaml-spec-v0.2.schema.json",
     "0.3": "yaml-spec-v0.3.schema.json",
@@ -187,7 +196,7 @@ def _resolve_schema_path(
 ) -> Path:
     if explicit_schema is not None:
         return Path(explicit_schema)
-    schema_name = _VERSION_SCHEMA_MAP.get(version)
+    schema_name = SPEC_SCHEMAS.get(version)
     if schema_name is None:
         raise ConfigErrors(
             [
@@ -195,7 +204,7 @@ def _resolve_schema_path(
                     code="UNSUPPORTED_VERSION",
                     message=f"No built-in schema for version '{version}'",
                     path="version",
-                    hint=f"Supported versions: {', '.join(sorted(_VERSION_SCHEMA_MAP))}",
+                    hint=f"Supported versions: {', '.join(sorted(SPEC_SCHEMAS))}",
                 )
             ]
         )

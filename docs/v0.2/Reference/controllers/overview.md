@@ -105,6 +105,8 @@ controllers:
       delete: false             # no DELETE route is generated
 ```
 
+A request using a method that the path does not serve answers `405 Method Not Allowed` with an `Allow` header listing the methods it does serve; a path that serves no method answers 404.
+
 Override the method, path, or access of an operation by giving it a map:
 
 ```yaml

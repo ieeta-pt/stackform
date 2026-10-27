@@ -129,14 +129,30 @@ class ServiceDesugarer:
             )
 
         entity = entities[entity_name]
+        is_auth = isinstance(entity, dict) and entity.get("type") == "auth"
         service_ops = entry.get("operations", {})
         shared = {key: entry[key] for key in _SHARED_KEYS if key in entry}
+
+        provided = {*CRUD_OPERATIONS, *(AUTH_OPERATIONS if is_auth else ()), *repo.get("operations", {})}
+        unknown = sorted(
+            name for name, value in service_ops.items()
+            if isinstance(value, bool) and name not in provided
+        )
+        if unknown:
+            raise ConfigError(
+                code="DESUGAR_SERVICE_OPERATION_UNKNOWN",
+                message=(
+                    f"Service '{svc_name}' switches {', '.join(map(repr, unknown))}, which "
+                    f"repository '{repo_name}' does not provide"
+                ),
+                path=f"services.{svc_name}.operations.{unknown[0]}",
+                hint="Name a CRUD operation or an operation the repository declares, or give it a handler",
+            )
 
         self._expand_crud_operations(
             svc_name, repo_name, repo, service_ops, shared, defaults, expanded
         )
 
-        is_auth = isinstance(entity, dict) and entity.get("type") == "auth"
         if is_auth:
             self._expand_auth_operations(
                 svc_name, repo_name, service_ops, auth_defaults, expanded

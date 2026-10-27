@@ -91,6 +91,35 @@ def test_handler_receives_the_last_value_of_a_repeated_query_key(api):
     assert response.status_code == 200, response.text
     assert response.json()["query"] == {"page": "2"}
 
+
+def test_repository_handler_operation_receives_the_request(api):
+    response = api.get("/api/tasks/featured/t1?page=2")
+    assert response.status_code == 200, response.text
+    assert response.json()["params"] == {"id": "t1"}
+    assert response.json()["query"] == {"page": "2"}
+
+
+def test_child_service_override_replaces_the_inherited_handler(api):
+    response = api.post("/api/tasks/refuse/t1")
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Refused t1"}
+
+
+def test_crud_inherited_from_an_abstract_repository_limits_the_methods(api):
+    task = _create(api, "tasks", title=uuid4().hex)
+    response = api.delete(f"/api/tasks/{task['id']}")
+    assert response.status_code == 405
+    assert "GET" in response.headers["allow"]
+
+
+def test_an_integer_number_stays_an_integer(api):
+    title = uuid4().hex
+    created = _create(api, "tasks", title=title, rank=200)
+    [listed] = api.get(f"/api/tasks/by-title/{title}").json()
+    ranks = [created["rank"], api.get(f"/api/tasks/{created['id']}").json()["rank"], listed["rank"]]
+    assert [repr(rank) for rank in ranks] == ["200"] * 3
+
+
 @pytest.fixture(scope="module")
 def user(api):
     login = {"email": f"{uuid4().hex}@example.com", "password": "correct-horse-battery"}

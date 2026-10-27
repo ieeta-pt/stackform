@@ -76,7 +76,7 @@ controllers:
           size: { default: 20, max: 100 }
           count: none             # none | exact (default none)
           onOverflow: clamp       # clamp | reject             (default clamp)
-          envelope: true          # default false
+          envelope: true          # default false; required by keyset and count: exact
 ```
 
 ## Strategies
@@ -111,8 +111,9 @@ pagination:
 
 ## Envelopes
 
-With `envelope: false` (the default) the response is a bare array. With
-`envelope: true`:
+With `envelope: false` (the default) the response is a bare array of offset
+rows. Keyset pagination and `count: exact` carry their `next` token and `total`
+in the envelope, so they require `envelope: true`. With `envelope: true`:
 
 | strategy | envelope |
 |----------|----------|
@@ -127,7 +128,7 @@ to pass as `after` for the following page (`null` on the last page), and
 
 | code | raised when |
 |------|-------------|
-| `SCHEMA_VALIDATION_ERROR` | an unknown key, a `strategy` other than `offset`/`keyset`, a `count` other than `none`/`exact`, an `onOverflow` other than `clamp`/`reject`, a missing or non-integer `size.default`/`size.max`, or a sort entry without `field` or with a `dir` other than `asc`/`desc` |
+| `SCHEMA_VALIDATION_ERROR` | an unknown key, a `strategy` other than `offset`/`keyset`, a `count` other than `none`/`exact`, an `onOverflow` other than `clamp`/`reject`, a missing or non-integer `size.default`/`size.max`, keyset or `count: exact` without `envelope: true`, or a sort entry without `field` or with a `dir` other than `asc`/`desc` |
 | `PAGINATION_UNSUPPORTED` | `pagination` is set on a route whose operation is not a repository list |
 | `PAGINATION_INVALID_SIZE` | `size.default` exceeds `size.max` |
 | `PAGINATION_SORT_FIELD_UNKNOWN` | a sort field is not a field of the entity |

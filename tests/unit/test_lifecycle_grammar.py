@@ -72,11 +72,23 @@ def test_schema_rejects_misused_lifecycle_keys(tmp_path, version, repository):
 
 
 @pytest.mark.parametrize("version", VERSIONS)
-def test_lifecycle_requires_a_concrete_repository(tmp_path, version):
-    spec = _spec(version, {})
-    spec["repositories"]["base"] = {"abstract": True, "softDelete": "deletedAt"}
+def test_lifecycle_is_inherited_from_an_abstract_repository(tmp_path, version):
+    spec = _spec(version, {"extends": "base"})
+    spec["repositories"]["base"] = {
+        "abstract": True,
+        "softDelete": "deletedAt",
+        "ttl": {"field": "createdAt", "seconds": 60},
+    }
+    collection = _load(tmp_path, spec).collections["posts"]
+    assert collection.lifecycle == Lifecycle(removal="deletedAt", expiry=Expiry("createdAt", 60))
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_inherited_lifecycle_is_validated_on_the_extending_repository(tmp_path, version):
+    spec = _spec(version, {"extends": "base"})
+    spec["repositories"]["base"] = {"abstract": True, "ttl": {"field": "title", "seconds": 60}}
     errors = _errors(tmp_path, spec)
-    assert {error.code for error in errors} == {"SCHEMA_VALIDATION_ERROR"}
+    assert {error.code for error in errors} == {"LIFECYCLE_FIELD_NOT_DATETIME"}
 
 
 @pytest.mark.parametrize("version", VERSIONS)

@@ -78,11 +78,30 @@ repositories:
 
 When the abstract repository declares `operations`, the generated backend emits it as a base class that every extending repository subclasses. An abstract repository without operations only contributes configuration.
 
+An abstract repository may declare any repository key, including `crud`, `softDelete`, `ttl` and operations whose queries use `$params` symbols or name fields of the stored entity. Those keys are checked where they take effect: on every extending repository, whose merged entry must be a valid repository for its own entity.
+
+```yaml
+repositories:
+  auditable:
+    abstract: true
+    crud: [list, get, create]
+    softDelete: deletedAt
+    ttl: { field: createdAt, seconds: 86400 }
+    operations:
+      bySlug:
+        query:
+          command: findOne
+          filter: { slug: $params.slug }
+  articles:
+    entity: article
+    extends: auditable
+```
+
 ### `operations`
 
 Type: map. Optional.
 
-Declares custom operations beyond the six built-in CRUD verbs. This block is exclusively for custom operations; it does NOT toggle CRUD on or off (use `crud:` for that). Operation names start with a letter and contain only letters, digits and underscores (`publishedByOwner`, `count_all`). Each entry must define either a `query` or a `handler`; an entry with neither is rejected with `OPERATION_MISSING_QUERY_OR_HANDLER`.
+Declares custom operations beyond the six built-in CRUD verbs. This block is exclusively for custom operations; it does NOT toggle CRUD on or off (use `crud:` for that). Operation names start with a letter and contain only letters, digits and underscores (`publishedByOwner`, `count_all`). Each entry defines exactly one of `query` or `handler`; an entry with neither or both fails schema validation.
 
 On a MongoDB datastore a `query` runs a MongoDB command against the repository's collection:
 
@@ -193,8 +212,7 @@ Each repository name is independent of the entity name. `users` binds to entity 
 
 | Code | Cause |
 |------|-------|
-| `CRUD_WITHOUT_ENTITY` | `crud` specified but the repository has no `entity`. |
-| `OPERATION_MISSING_QUERY_OR_HANDLER` | A custom operation declares neither `query` nor `handler`. |
+| `CRUD_WITHOUT_ENTITY` | `crud` specified on a concrete repository that has no `entity`. |
 | `QUERY_COMMAND_UNKNOWN` | `query.command` is not a recognized MongoDB command. |
 | `QUERY_MISSING_FIELD` | The command requires a field (e.g. `filter`, `pipeline`) that is absent. |
 | `QUERY_MISSING_COLLECTION` | A query on an entity-less repository omits `collection`. |

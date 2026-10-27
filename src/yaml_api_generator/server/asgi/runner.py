@@ -5,7 +5,7 @@ from urllib.parse import parse_qs
 
 from yaml_api_generator.ir import IRDocument
 from yaml_api_generator.runtime.lifecycle import Purger
-from ..common.server_context import RuntimeContext, RuntimeRouteDescriptor
+from ..common.server_context import RuntimeContext
 from ..common.loader import initialize_indexes
 from ..common.pipeline import Pipeline
 from ..common.pipeline_builder import PipelineBuilder
@@ -13,7 +13,7 @@ from ..common.repositories import RepositoryRegistry
 from ..common.steps import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
 
 
-_RouteEntry = tuple[re.Pattern[str], Pipeline, RuntimeRouteDescriptor]
+_RouteEntry = tuple[re.Pattern[str], Pipeline]
 
 
 def _compile_path(path: str) -> re.Pattern[str]:
@@ -33,9 +33,7 @@ class ASGIApp:
         builder = PipelineBuilder(ctx=ctx, registry=registry)
 
         for route in ctx.routes:
-            pipeline = builder.build_for_route(route)
-            pattern = _compile_path(route.path)
-            entry: _RouteEntry = (pattern, pipeline, route)
+            entry: _RouteEntry = (_compile_path(route.path), builder.build_for_route(route))
             self._routes.setdefault(route.method.upper(), []).append(entry)
 
     async def __call__(
@@ -75,10 +73,14 @@ class ASGIApp:
         method = scope["method"].upper()
         path = scope["path"]
 
-        pipeline, route, url_params = self._match_route(method, path)
-        if pipeline is None:
-            await self._send_json(send, 404, {"detail": "Not found"})
+        routes = self._routes_at(path)
+        if method not in routes:
+            if routes:
+                await self._send_json(send, 405, {"detail": "Method Not Allowed"}, allow=sorted(routes))
+            else:
+                await self._send_json(send, 404, {"detail": "Not found"})
             return
+        pipeline, url_params = routes[method]
 
         try:
             body = await self._read_body(receive)
@@ -118,15 +120,14 @@ class ASGIApp:
 
         await self._send_json(send, 200, ctx.response)
 
-    def _match_route(
-        self, method: str, path: str,
-    ) -> tuple[Pipeline | None, RuntimeRouteDescriptor | None, dict[str, str]]:
-        entries = self._routes.get(method, [])
-        for pattern, pipeline, route in entries:
-            match = pattern.match(path)
-            if match:
-                return pipeline, route, match.groupdict()
-        return None, None, {}
+    def _routes_at(self, path: str) -> dict[str, tuple[Pipeline, dict[str, str]]]:
+        """Each method served at ``path``, mapped to the first route declaring it."""
+        return {
+            method: (pipeline, match.groupdict())
+            for method, entries in self._routes.items()
+            for pattern, pipeline in reversed(entries)
+            if (match := pattern.match(path))
+        }
 
     @staticmethod
     async def _read_body(receive: Any) -> dict[str, Any] | None:
@@ -141,7 +142,7 @@ class ASGIApp:
         return json.loads(body)
 
     @staticmethod
-    async def _send_json(send: Any, status: int, data: Any) -> None:
+    async def _send_json(send: Any, status: int, data: Any, allow: list[str] | None = None) -> None:
         body = json.dumps(data, default=str).encode("utf-8")
         await send({
             "type": "http.response.start",
@@ -149,6 +150,7 @@ class ASGIApp:
             "headers": [
                 [b"content-type", b"application/json"],
                 [b"content-length", str(len(body)).encode("latin-1")],
+                *([[b"allow", ", ".join(allow).encode("latin-1")]] if allow else []),
             ],
         })
         await send({"type": "http.response.body", "body": body})

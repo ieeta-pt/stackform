@@ -158,7 +158,7 @@ def _inject_failing_pipeline(app, error_cls):
     from yaml_api_generator.server.common.pipeline import Pipeline
 
     for method, entries in app._routes.items():
-        for i, (pattern, pipeline, route) in enumerate(entries):
+        for i, (pattern, pipeline) in enumerate(entries):
             base = pipeline._base_ctx
 
             async def _fail(ctx, _error=error_cls):
@@ -171,7 +171,7 @@ def _inject_failing_pipeline(app, error_cls):
                 collection=base.collection,
                 operation=base.operation,
             )
-            entries[i] = (pattern, new_pipeline, route)
+            entries[i] = (pattern, new_pipeline)
 
 
 @pytest.mark.anyio

@@ -461,7 +461,7 @@ def test_offset_pagination_parsed_onto_route(tmp_path):
 def test_keyset_pagination_parsed_with_sort(tmp_path):
     ir = _load(
         tmp_path,
-        "strategy: keyset\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score, dir: desc }\n  - { field: id }",
+        "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score, dir: desc }\n  - { field: id }",
     )
     pagination = _list_route(ir).pagination
     assert pagination.strategy == "keyset"
@@ -473,6 +473,22 @@ def test_unimplemented_modes_are_rejected_by_the_schema(tmp_path, unimplemented)
     with pytest.raises(ConfigErrors) as excinfo:
         _load(tmp_path, f"{unimplemented}\nsize: {{ default: 10, max: 50 }}")
     assert _error_codes(excinfo) == {"SCHEMA_VALIDATION_ERROR"}
+
+
+@pytest.mark.parametrize(
+    "paging",
+    [
+        "strategy: keyset\nsort:\n  - { field: id }",
+        "strategy: keyset\nenvelope: false\nsort:\n  - { field: id }",
+        "strategy: offset\ncount: exact",
+        "strategy: offset\ncount: exact\nenvelope: false",
+    ],
+)
+def test_next_token_and_total_require_the_envelope(tmp_path, paging):
+    with pytest.raises(ConfigErrors) as excinfo:
+        _load(tmp_path, f"{paging}\nsize: {{ default: 10, max: 50 }}")
+    assert _error_codes(excinfo) == {"SCHEMA_VALIDATION_ERROR"}
+    assert "set envelope: true" in excinfo.value.errors[0].message
 
 
 @pytest.mark.parametrize(
@@ -493,7 +509,7 @@ def _error_codes(excinfo) -> set[str]:
 
 def test_keyset_without_sort_is_coded_error(tmp_path):
     with pytest.raises(ConfigErrors) as excinfo:
-        _load(tmp_path, "strategy: keyset\nsize: { default: 20, max: 100 }")
+        _load(tmp_path, "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }")
     assert "PAGINATION_KEYSET_SORT_REQUIRED" in _error_codes(excinfo)
 
 
@@ -510,7 +526,7 @@ def test_keyset_non_unique_tiebreaker_is_coded_error(tmp_path):
     with pytest.raises(ConfigErrors) as excinfo:
         _load(
             tmp_path,
-            "strategy: keyset\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }",
+            "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }",
         )
     assert "PAGINATION_KEYSET_TIEBREAKER_NOT_UNIQUE" in _error_codes(excinfo)
 
@@ -518,7 +534,7 @@ def test_keyset_non_unique_tiebreaker_is_coded_error(tmp_path):
 def test_keyset_unique_tiebreaker_is_accepted(tmp_path):
     ir = _load(
         tmp_path,
-        "strategy: keyset\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }\n  - { field: slug }",
+        "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }\n  - { field: slug }",
     )
     assert _list_route(ir).pagination.sort[-1] == IRSortKey("slug", "asc")
 
@@ -529,7 +545,7 @@ def test_keyset_nullable_sort_field_is_rejected(tmp_path):
         "score: { type: number }",
     )
     block = textwrap.indent(
-        "strategy: keyset\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }\n  - { field: id }",
+        "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }\nsort:\n  - { field: score }\n  - { field: id }",
         "          ",
     )
     path = tmp_path / "nullable.yaml"
@@ -544,7 +560,7 @@ def test_unknown_sort_field_is_coded_error(tmp_path):
     with pytest.raises(ConfigErrors) as excinfo:
         _load(
             tmp_path,
-            "strategy: keyset\nsize: { default: 20, max: 100 }\nsort:\n  - { field: nope }",
+            "strategy: keyset\nenvelope: true\nsize: { default: 20, max: 100 }\nsort:\n  - { field: nope }",
         )
     assert "PAGINATION_SORT_FIELD_UNKNOWN" in _error_codes(excinfo)
 

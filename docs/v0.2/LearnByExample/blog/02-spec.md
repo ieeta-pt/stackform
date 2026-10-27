@@ -205,8 +205,8 @@ controllers:
   (`method` and `path` are required for a custom op). At runtime the handler is
   your own module: provide a `blog.py` next to the spec exposing
   `async def publish_post(request)`. The FastAPI, DRF, and raw-ASGI build targets
-  all emit the custom route; `stackform run` invokes the same declaration through
-  its `RequestContext` handler contract.
+  all emit the custom route, and they and `stackform run` call the handler with
+  the same request object.
 
 - Unique fields. `unique: true` on `email` drives the UI and creates a MongoDB
   unique partial index. Duplicate emails are rejected with `409 Conflict` without

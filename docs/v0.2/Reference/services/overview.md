@@ -55,6 +55,8 @@ The service key must match a repository key of the same name for this shorthand 
 - `repositories.<name>.crud: [...]` selects the subset that repository exposes.
 - `services.<name>.operations.<op>` is the final override (a boolean, or a `{ handler }` map).
 
+A boolean switch names a CRUD operation (or, on an auth entity, an auth operation) or a custom operation the repository declares; any other name, such as a misspelled `lsit: false`, fails with `DESUGAR_SERVICE_OPERATION_UNKNOWN`. To add a new operation, give it a `{ handler }` map instead.
+
 Resolution precedence, highest first: service `operations` > repository `crud` > `api.operations.defaults` > all enabled. See [Composable per-operation CRUD](../repositories/composable-crud.md) and [Repository operations](../repositories/operations.md).
 
 ## Per-operation overrides
@@ -103,19 +105,16 @@ With `api: { basePath: /api, version: v1 }` this exposes `POST /api/v1/my-collec
 
 ### Handler contract
 
-The handler is a Python function referenced by `importKey.functionName`. Generated
-backends pass their request object (the raw-ASGI target supplies a compatible
-request facade):
+The handler is a Python function referenced by `importKey.functionName`. Every
+backend and `stackform run` call it with the same request object and send its
+return value as the response body:
 
 ```python
 async def publish(request):
-    entity_id = request.path_params["id"]
-    body = await request.json()
-    ...
-    return {"id": entity_id, "published": True}
+    return {"id": request.params["id"], "published": True, "note": request.body.get("note")}
 ```
 
-The handler does its own data access and owns its response; an uncaught exception becomes a 500. The `stackform run` dev server uses a different handler shape (a request-context pipeline step). Both contracts are documented in [Custom operations](custom-operations.md) and [Handler context](handler-context.md).
+The handler does its own data access. Raising `ValueError` answers 422; any other exception answers 500. Every request attribute is listed in [Handler context](handler-context.md).
 
 ## Top-level `handler` vs per-operation `handler`
 
@@ -134,7 +133,7 @@ services:
 
 ## Inheritance with `abstract` and `extends`
 
-An `abstract: true` service is a template: no controller may reference it. A service with `extends: <name>` inherits every key of that abstract service except `abstract` and `extends`; its own keys win and `operations` merge per operation.
+An `abstract: true` service is a template: no controller may reference it. A service with `extends: <name>` inherits every key of that abstract service except `abstract` and `extends`; its own keys win and `operations` merge per operation. An abstract service may itself extend another abstract service: a service inherits from every level of the chain, and the nearest declaration of an operation wins, so an extending service replaces an inherited handler by declaring the operation again.
 
 ```yaml
 services:

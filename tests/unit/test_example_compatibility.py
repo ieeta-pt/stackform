@@ -82,8 +82,8 @@ def test_raw_routes_use_one_prefix_and_include_environment_files(tmp_path):
             "-c",
             (
                 "from app import ASGIApp; "
-                "print(ASGIApp._match_route('GET', '/api/v1/users')[0] is not None); "
-                "print(ASGIApp._match_route('GET', '/api/v1/api/v1/users')[0] is not None)"
+                "print('GET' in ASGIApp._routes_at('/api/v1/users')); "
+                "print('GET' in ASGIApp._routes_at('/api/v1/api/v1/users'))"
             ),
         ],
         cwd=backend,

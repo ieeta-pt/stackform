@@ -974,7 +974,7 @@
     "RepositoryConfig": {
       "type": "object",
       "additionalProperties": false,
-      "allOf": [{ "$ref": "yaml-spec-v0.2.schema.json#/$defs/RepositoryLifecycleRules" }],
+      "allOf": [{ "$ref": "yaml-spec-v0.2.schema.json#/$defs/StandaloneRepositoryLifecycleRules" }],
       "properties": {
         "softDelete": {
           "type": "string"
@@ -1274,6 +1274,19 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              { "required": ["strategy"], "properties": { "strategy": { "const": "keyset" } } },
+              { "required": ["count"], "properties": { "count": { "const": "exact" } } }
+            ]
+          },
+          "then": {
+            "required": ["envelope"],
+            "properties": { "envelope": { "const": true, "errorMessage": "keyset pagination and count: exact return their next token and total in the envelope: set envelope: true" } },
+            "errorMessage": "keyset pagination and count: exact return their next token and total in the envelope: set envelope: true"
+          }
+        },
         {
           "if": {
             "properties": {

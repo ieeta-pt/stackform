@@ -8,7 +8,7 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from tests.unit.support.generated_apps import generate, run_generated, write_spec
+from tests.unit.support.generated_apps import run_generated, write_spec
 from yaml_api_generator.runtime.security_headers import (
     STANDARD_HEADERS,
     DjangoSecurityHeadersMiddleware,
@@ -85,18 +85,12 @@ def test_dev_server_response_headers(tmp_path, version, enabled, build):
 
 
 @_CASES
-@pytest.mark.parametrize("target", ["fastapi", "raw"])
+@pytest.mark.parametrize("target", ["fastapi", "raw", "drf"])
 def test_generated_app_response_headers(tmp_path, version, enabled, target):
-    headers = run_generated(write_spec(tmp_path, _SPECS[version, enabled]), target, _PROBE)
+    headers = run_generated(
+        write_spec(tmp_path, _SPECS[version, enabled]), target, _PROBE, {"DJANGO_SECRET_KEY": "test-secret"}
+    )
     assert _standard_headers(headers) == _expected(enabled)
-
-
-@_CASES
-def test_generated_drf_installs_middleware_only_when_enabled(tmp_path, version, enabled):
-    backend = generate(write_spec(tmp_path, _SPECS[version, enabled]), "drf")
-    settings = next(backend.glob("*/settings.py")).read_text()
-    assert ("api.security_headers.DjangoSecurityHeadersMiddleware" in settings) is enabled
-    assert (backend / "api" / "security_headers.py").exists() is enabled
 
 
 def test_asgi_middleware_keeps_headers_the_route_set():

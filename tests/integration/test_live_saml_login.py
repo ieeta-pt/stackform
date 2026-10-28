@@ -242,6 +242,11 @@ async def test_metadata_publishes_the_service_provider(client, api):
     assert f'Location="{api}/users/auth/corporate/callback"' in metadata.text
 
 
+async def test_providers_listing_offers_the_saml_provider(client):
+    listing = await client.get("/users/auth/providers")
+    assert (listing.status_code, listing.json()) == (200, [{"name": "corporate", "type": "saml"}])
+
+
 async def test_logout_without_single_logout_service_is_not_implemented(client):
     assert (await client.get("/users/auth/corporate/logout")).status_code == 501
 

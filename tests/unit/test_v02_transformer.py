@@ -814,7 +814,7 @@ def test_111_document_binding_in_rule_resolved(tmp_path):
 
 def test_113_top_level_roles_rejected_by_schema():
     with pytest.raises(ConfigErrors) as exc_info:
-        load_and_generate_ir(str(INVALID_DIR / "roles-unknown-entity.yaml"))
+        load_and_generate_ir(str(INVALID_DIR / "top-level-roles.yaml"))
     assert {e.code for e in exc_info.value.errors} == {"SCHEMA_VALIDATION_ERROR"}
 
 

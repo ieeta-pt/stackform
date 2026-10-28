@@ -118,7 +118,7 @@ A repository can further narrow its own operations with its `crud:` list, and a 
 
 Type: object (operation flags). Optional.
 
-Controls the `register` and `login` endpoints for `type: auth` entities. These are **not generated unless you list them here.** Omitting `operations.auth` produces an auth entity with no register or login route.
+Controls the `register` and `login` endpoints for `type: auth` entities. These are **not generated unless you list them here.** Omitting `operations.auth` produces an auth entity with no register or login route. A controller that declares a `login` route still serves login for its own identity.
 
 | Field | Type | Default |
 |-------|------|---------|

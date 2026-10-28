@@ -7,7 +7,7 @@ from operator import attrgetter
 from typing import Any
 
 from yaml_api_generator.ir import IRDocument
-from yaml_api_generator.ir.api import IRSession
+from yaml_api_generator.ir.api import IRRoute, IRSession
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors
 
 from .access_transformer import AccessTransformer
@@ -105,15 +105,6 @@ class V02Transformer:
         if binding_errors:
             raise ConfigErrors(binding_errors)
 
-        identity_collections = self._identity.transform(
-            entities_data, collections, repo_entity_map,
-            _login_collections(api_data, services_data, repo_entity_map),
-        )
-
-        field_errors = self._identity.validate_auth_fields(collections, identity_collections)
-        if field_errors:
-            raise ConfigErrors(field_errors)
-
         services = self._route.transform_services(
             services_data, repo_entity_map, import_map, dtos_data
         )
@@ -127,6 +118,15 @@ class V02Transformer:
             entity_to_collection,
             pagination_parser=self._make_pagination_parser(collections),
         )
+
+        identity_collections = self._identity.transform(
+            entities_data, collections, repo_entity_map,
+            _login_collections(api_data, routes, repo_entity_map),
+        )
+
+        field_errors = self._identity.validate_auth_fields(collections, identity_collections)
+        if field_errors:
+            raise ConfigErrors(field_errors)
 
         policies, policy_errors = self._policies.transform(
             policies_data, entity_to_collection
@@ -227,14 +227,10 @@ class V02Transformer:
 
 
 def _login_collections(
-    api_data: dict[str, Any], services_data: dict[str, Any], repo_entity_map: dict[str, str]
+    api_data: dict[str, Any], routes: list[IRRoute], repo_entity_map: dict[str, str]
 ) -> set[str]:
-    """Every collection serves login unless `api.operations.auth.login` is false; then only
-    collections with an explicit login service do."""
-    if api_data.get("operations", {}).get("auth", {}).get("login") is not False:
+    """Every collection serves login when `api.operations.auth.login` is true; otherwise only
+    collections a controller declares a login route for do."""
+    if api_data.get("operations", {}).get("auth", {}).get("login") is True:
         return set(repo_entity_map)
-    return {
-        service["repository"]
-        for service in services_data.values()
-        if isinstance(service, dict) and service.get("operation") == "login"
-    }
+    return {route.collection for route in routes if route.operation == "login"}

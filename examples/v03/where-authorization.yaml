@@ -3,6 +3,8 @@ version: "0.3"
 api:
   basePath: /api
   version: v1
+  operations:
+    auth: { login: true }
 
 mongo:
   uri: mongodb://localhost:27017

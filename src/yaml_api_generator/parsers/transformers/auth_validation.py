@@ -5,9 +5,6 @@ entity can build cleanly while its authentication is silently dead. These checks
 run on the pre-desugar spec, mirroring ``validate_spec_access``, and reject the
 spec with coded errors:
 
-- AUTH_IDENTIFIER_REQUIRED: a ``via: password``/``apiKey`` identity with no
-  ``auth.identifier``. Without it the transformer builds no provider bindings,
-  ``resolve_principal`` is empty and no login route is emitted -- auth is dead.
 - AUTH_IDENTIFIER_FIELD_NOT_FOUND: ``auth.identifier`` names a field that does
   not exist on the entity, so login can never match a stored document. Mirrors
   the existing ``AUTH_ROLES_FIELD_NOT_FOUND`` check.
@@ -58,18 +55,8 @@ def _check_entity(
         for provider in map(_provider_name, entries)
         if provider not in CREDENTIAL_PROVIDERS | providers
     )
-    # A mapping entry carries its own identifier, so only bare names need auth.identifier.
     via = [entry for entry in entries if isinstance(entry, str)]
     identifier = auth.get("identifier")
-    if CREDENTIAL_PROVIDERS.intersection(via) and not identifier:
-        errors.append(ConfigError(
-            code="AUTH_IDENTIFIER_REQUIRED",
-            message=f"Auth entity '{name}' uses via {via} but declares no identifier",
-            path=f"{base}.identifier",
-            hint="Set auth.identifier to the field used to look up the principal",
-        ))
-        return
-
     fields = inherited_fields(name, entities)
     if identifier is not None and identifier not in fields:
         errors.append(ConfigError(

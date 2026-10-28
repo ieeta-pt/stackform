@@ -81,6 +81,15 @@ REJECTED = {
         {"via": [{"provider": "corp"}]},
         "'identifier' is a required property",
     ),
+    "v01-password-without-identifier": (
+        ("0.1",), ("collections", "posts", "auth"), {"via": "password"}, "'identifier' is a required property"
+    ),
+    "password-without-identifier": (
+        ("0.2", "0.3"), ("entities", "post", "auth"), {"via": "password"}, "'password' is not of type 'array'"
+    ),
+    "api-key-without-identifier": (
+        ("0.2", "0.3"), ("entities", "post", "auth"), {"via": ["apiKey"]}, "'apiKey' is not of type 'object'"
+    ),
     "api-name": (("0.2", "0.3"), ("api", "name"), "blog", "'name' was unexpected"),
     "root-input": (("0.3",), ("input",), ["orgId"], "'input' was unexpected"),
     "auth-bindings": (

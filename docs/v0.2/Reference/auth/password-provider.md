@@ -84,7 +84,7 @@ The provider is configured under the entity's `auth:` block.
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `identifier` | yes, with `via: password` | string (field name) | The field used as the login username (`AUTH_IDENTIFIER_REQUIRED` when missing). Common values: `email`, `username`. |
+| `identifier` | yes, with `via: password` | string (field name) | The field used as the login username (schema validation error when missing, unless the `via` binding sets `identifier`). Common values: `email`, `username`. |
 | `via` | yes, for password login | string or list | Providers to enable. Use `password` here; a list (for example `[password, apiKey]`) combines providers. A list entry may also be a binding object (`provider`, `identifier`, `claim_mapping`, `auto_provision`, `relations`) that attaches an OIDC or SAML provider. See [Auth overview](./overview.md#auth-block) and [Claim mapping](./claim-mapping.md). |
 | `roles` | no | string (field name) | Names an existing `enum` field that carries the principal's role. See [Roles overview](../roles/overview.md). |
 

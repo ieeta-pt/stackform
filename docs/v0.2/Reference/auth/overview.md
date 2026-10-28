@@ -46,9 +46,9 @@ A record's roles come from one of two places:
 ## Behavior
 
 - **Parse time:** declaring `type: auth` requires an `auth:` block (schema validation).
-  A `password` or `apiKey` entity must set `auth.identifier`
-  (`AUTH_IDENTIFIER_REQUIRED`) to one of its fields
-  (`AUTH_IDENTIFIER_FIELD_NOT_FOUND`), and an `apiKey` entity must declare an
+  A `password` or `apiKey` entity must set `auth.identifier`, or carry an
+  `identifier` in its `via` binding (schema validation), and the identifier must be
+  one of its fields (`AUTH_IDENTIFIER_FIELD_NOT_FOUND`); and an `apiKey` entity must declare an
   `apiKey` field (`AUTH_API_KEY_FIELD_MISSING`). If `auth.roles` is set, the named
   field must exist (`AUTH_ROLES_FIELD_NOT_FOUND`) and be of `type: enum`
   (`AUTH_ROLES_FIELD_NOT_ENUM`).
@@ -338,7 +338,7 @@ access: apiClient:enterprise
 | `type: auth` without `auth:` block | schema validation | `auth` is required when type is "auth" |
 | `auth.roles` names a missing field | `AUTH_ROLES_FIELD_NOT_FOUND` | "Roles field 'X' not found in entity 'Y'" |
 | `auth.roles` field is not an enum | `AUTH_ROLES_FIELD_NOT_ENUM` | "Roles field 'X' must be of type 'enum'" |
-| `password` or `apiKey` entity without `auth.identifier` | `AUTH_IDENTIFIER_REQUIRED` | "Auth entity 'Y' uses via password but declares no identifier" |
+| `password` or `apiKey` entity without `auth.identifier` or a binding `identifier` | schema validation | `'password' is not of type 'object'` |
 | `auth.identifier` names a missing field | `AUTH_IDENTIFIER_FIELD_NOT_FOUND` | "Auth identifier 'X' not found in entity 'Y'" |
 | `apiKey` entity without an `apiKey` field | `AUTH_API_KEY_FIELD_MISSING` | "Auth entity 'Y' uses via apiKey but declares no apiKey field" |
 | `via` names an undeclared provider | `AUTH_VIA_UNKNOWN_PROVIDER` | "Auth entity 'Y' uses via 'X', which is not a declared provider" |

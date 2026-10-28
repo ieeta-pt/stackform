@@ -16,18 +16,6 @@ def _auth_entity(auth: dict, fields: dict | None = None) -> dict:
     }
 
 
-# ---- AUTH_IDENTIFIER_REQUIRED ----
-
-def test_password_without_identifier_rejected():
-    entities = {"user": _auth_entity({"via": "password"})}
-    assert "AUTH_IDENTIFIER_REQUIRED" in _codes(entities)
-
-
-def test_apikey_without_identifier_rejected():
-    entities = {"client": _auth_entity({"via": ["apiKey"]})}
-    assert "AUTH_IDENTIFIER_REQUIRED" in _codes(entities)
-
-
 def test_password_with_identifier_accepted():
     entities = {
         "user": _auth_entity(

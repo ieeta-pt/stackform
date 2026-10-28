@@ -76,7 +76,7 @@ at `/api/v1/my-collection`.
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `identifier` | yes | string (field name) | Names the field that identifies the client (for example `clientId`; `AUTH_IDENTIFIER_REQUIRED` when missing). Not used for API key matching, but conventionally declared `unique: true`. |
+| `identifier` | yes | string (field name) | Names the field that identifies the client (for example `clientId`; schema validation error when missing, unless the `via` binding sets `identifier`). Not used for API key matching, but conventionally declared `unique: true`. |
 | `via` | yes | string or list | Must include `apiKey`. A list (for example `[apiKey, password]`) enables more than one credential type on the same entity. |
 | `roles` | no | string (field name) | Names an `enum` field whose value becomes the principal's role. See Roles. |
 

@@ -396,7 +396,12 @@ def register_provider_routes(
     if has_external_login:
         app.add_api_route(
             f"{base_prefix}/auth/exchange",
-            _exchange_endpoint(session_tokens, uses_cookie=ctx.session.uses_cookie),
+            _exchange_endpoint(
+                session_tokens,
+                auth.identity_collections,
+                provisioning.records_of(registry, ctx.collections),
+                uses_cookie=ctx.session.uses_cookie,
+            ),
             methods=["POST"],
         )
 
@@ -594,7 +599,13 @@ def _oidc_callback_endpoint(
     return endpoint
 
 
-def _exchange_endpoint(session_tokens: SessionTokens, *, uses_cookie: bool = False):
+def _exchange_endpoint(
+    session_tokens: SessionTokens,
+    identities: Mapping[str, RuntimeIdentityDescriptor],
+    records: provisioning.RecordsOf,
+    *,
+    uses_cookie: bool = False,
+):
     async def endpoint(request: Request, payload: dict[str, str]) -> Any:
         code = payload.get("code")
         if not code:
@@ -603,11 +614,16 @@ def _exchange_endpoint(session_tokens: SessionTokens, *, uses_cookie: bool = Fal
         if redeemed is None:
             raise HTTPException(status_code=401, detail="Invalid or expired code")
         subject, identity_collection, _ = redeemed
+        identity = identities[identity_collection]
+        record = await records(identity_collection).find_one({identity.id_field: subject})
+        if record is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired code")
         session = session_tokens.issue(subject, identity_collection)
+        signed_in = jsonable_encoder(identity.role_store.signed_in(record))
         if not uses_cookie:
-            return session
+            return {**session, **signed_in}
         csrf_token = issue_csrf_token()
-        response = JSONResponse({"csrf_token": csrf_token})
+        response = JSONResponse({**signed_in, "csrf_token": csrf_token})
         set_session_cookies(
             response,
             request,

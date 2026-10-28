@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from adrf.views import APIView
 from drf_spectacular.utils import extend_schema
 
+from api.access import Roles
 from api.authentication.auth import find_by_password
 from api.authentication.jwt_utils import create_jwt_token
 from api.authentication.mongodb import get_database
@@ -28,7 +29,6 @@ class {{ class_name }}LoginView(APIView):
             return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
         token = create_jwt_token(str(subject), "{{ identity.name }}")
-        safe_user = {k: v for k, v in doc.items() if k not in ("_id", "_auth", "password", "apiKey")}
-        return Response({"token": token, "user": safe_user})
+        return Response({"token": token, **{{ identity.role_store | py_literal }}.signed_in(doc)})
 
 {% endfor %}

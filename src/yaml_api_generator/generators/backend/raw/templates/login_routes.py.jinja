@@ -1,5 +1,6 @@
 from typing import Any
 
+from access import Roles
 from dependencies.auth import find_by_password
 from dependencies.jwt_utils import create_jwt_token
 from fields import Model
@@ -22,7 +23,6 @@ async def handle_login_{{ identity.name }}(url_params: dict, body: dict | None, 
         return 401, {"detail": "Invalid credentials"}
 
     token = create_jwt_token(str(subject), "{{ identity.name }}")
-    safe_user = {k: v for k, v in doc.items() if k not in ("_id", "_auth", "password", "apiKey")}
-    return 200, {"token": token, "user": safe_user}
+    return 200, {"token": token, **{{ identity.role_store | py_literal }}.signed_in(doc)}
 
 {% endfor %}

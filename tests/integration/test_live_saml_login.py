@@ -211,6 +211,14 @@ async def test_sign_in_resolves_relations_and_exchanges_the_login_code(client, i
     )
 
 
+async def test_exchange_tells_the_ui_who_signed_in(client, identity_provider):
+    session = await _session(client, identity_provider)
+
+    assert session["user"]["email"] == EMAIL
+    assert {"_id", "_auth", "password"}.isdisjoint(session["user"])
+    assert session["roles"] == []
+
+
 async def test_login_code_is_single_use(client, identity_provider):
     action, saml_response = await _identity_provider_post(client, identity_provider)
     callback = await client.post(action, data={"SAMLResponse": saml_response})

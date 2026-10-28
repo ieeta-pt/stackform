@@ -111,7 +111,7 @@ export default function Login() {
           </button>
         </form>
 
-        <ExternalProviders collection="{{ entity.repository_name }}" />
+        <ExternalProviders identity="{{ entity.name }}" collection="{{ entity.repository_name }}" />
 
         {% if 'register' in entity.routes %}
         <div style={{ "{{" }} marginTop: 16, fontSize: 13, color: 'var(--wf-ink-dim)' {{ "}}" }}>

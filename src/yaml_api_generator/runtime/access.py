@@ -362,6 +362,9 @@ def held_roles(principal: Mapping[str, Any] | None, hierarchies: RoleHierarchies
     return {*names, *chain.from_iterable(hierarchy.get(role, ()) for role in names)}
 
 
+_CREDENTIALS = frozenset({"_id", "_auth", "password", "apiKey"})
+
+
 @dataclass(frozen=True)
 class Roles:
     """Where an identity record keeps its roles: its ``field``, or the managed store under
@@ -378,6 +381,14 @@ class Roles:
         return role_names(
             document.get(self.field) if self.field else (document.get("_auth") or {}).get("roles")
         )
+
+    def signed_in(self, record: Mapping[str, Any]) -> dict[str, Any]:
+        """What a session response tells the caller signed in as ``record``: the record
+        without its credentials, and the roles it holds."""
+        return {
+            "user": {key: value for key, value in record.items() if key not in _CREDENTIALS},
+            "roles": self.of(record),
+        }
 
     def _grantable(self, payload: Mapping[str, Any], held: Collection[str]) -> bool:
         return self.field in payload and set(role_names(payload[self.field])) <= set(held)

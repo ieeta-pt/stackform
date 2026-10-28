@@ -94,7 +94,7 @@ class TestByteIdentity:
     def test_token_url_default_is_byte_identical(self, plain_ctx, tmp_path):
         out = self._files(plain_ctx, tmp_path)
         assert "set_session_cookies" not in out["login"]
-        assert 'return {**session, "user": safe_user}' in out["login"]
+        assert 'return {**session, **signed_in}' in out["login"]
         assert "csrf_valid" not in out["app"]
         assert "_CsrfMiddleware" not in out["app"]
         assert "session_token_from_request" not in out["auth"]
@@ -124,7 +124,7 @@ class TestCookieGeneration:
         FastAPIGenerator().generate(cookie_ctx, tmp_path)
         login = (tmp_path / "routes" / "login.py").read_text()
         assert 'set_session_cookies(response, request, session["token"], csrf_token)' in login
-        assert 'return {**session, "user": safe_user}' not in login
+        assert 'return {**session, **signed_in}' not in login
         assert '"csrf_token": csrf_token' in login
 
     def test_csrf_middleware_wired(self, cookie_ctx, tmp_path):
@@ -163,7 +163,7 @@ class TestCookieGeneration:
         FastAPIGenerator().generate(build_context(ir), tmp_path)
         exchange = (tmp_path / "routes" / "external_login.py").read_text()
 
-        assert 'response = JSONResponse({"csrf_token": csrf_token})' in exchange
+        assert 'response = JSONResponse({**signed_in, "csrf_token": csrf_token})' in exchange
         assert 'set_session_cookies(response, request, session["token"], csrf_token)' in exchange
         assert "return session" not in exchange
 
@@ -208,7 +208,7 @@ class TestCookieGeneration:
         assert "headers.set('x-csrf-token'" in main
         assert "localStorage.setItem('token'" not in app
         assert "await fetch(`${API_BASE_URL}/auth/logout`" in app
-        assert "onToken('cookie-session')" in app
+        assert "signIn('cookie-session', callerOf(JSON.parse(localStorage.getItem('sso')!).identity, session))" in app
 
 
 def _load(path, name):
@@ -298,7 +298,11 @@ class TestDevServerCookieFlow:
         register_provider_routes(
             app,
             ctx,
-            RepositoryRegistry.single(InMemoryRepository()),
+            RepositoryRegistry.single(
+                InMemoryRepository(
+                    {"users": [{"id": "user-1", "email": "a@example.test", "_auth": {"roles": ["admin"]}}]}
+                )
+            ),
             SessionTokens(ctx.session),
         )
         code = login_codes.issue("user-1", "users")
@@ -314,6 +318,8 @@ class TestDevServerCookieFlow:
             assert response.status_code == 200
             assert "token" not in response.json()
             assert response.json()["csrf_token"] == client.cookies["csrf_token"]
+            assert response.json()["user"] == {"id": "user-1", "email": "a@example.test"}
+            assert response.json()["roles"] == ["admin"]
             assert client.cookies.get("session")
 
     @pytest.mark.asyncio

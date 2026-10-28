@@ -41,12 +41,8 @@ def LoginStep(
         if subject is None:
             raise UnauthorizedError("Identity record missing id field")
 
-        safe_user = {
-            k: v for k, v in user.items() if k not in ("password", "_id", "_auth")
-        }
-
         session = session_tokens.issue(str(subject), identity_collection.name)
-        ctx.response = {**session, "user": safe_user}
+        ctx.response = {**session, **identity_collection.role_store.signed_in(user)}
         return ctx
 
     return step

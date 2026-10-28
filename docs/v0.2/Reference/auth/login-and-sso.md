@@ -49,7 +49,7 @@ curl -X POST http://localhost:8000/api/v1/my-collection/login \
   -d '{"email": "alice@example.com", "password": "s3cr3t"}'
 ```
 
-On success the response is the token plus the matched record:
+On success the response is the token, the matched record and the roles it holds:
 
 ```json
 {
@@ -57,11 +57,14 @@ On success the response is the token plus the matched record:
   "user": {
     "id": "0190...",
     "email": "alice@example.com"
-  }
+  },
+  "roles": ["editor"]
 }
 ```
 
-The `user` object excludes `password`, `_id`, and the internal `_auth` namespace.
+The `user` object excludes `password`, `apiKey`, `_id`, and the internal `_auth` namespace.
+`roles` lists the roles the record holds, read from the identity's roles field or,
+when it declares none, from `_auth.roles`; it is empty for an identity without roles.
 A wrong password or unknown identifier both return 401 with an indistinguishable
 message (no user enumeration).
 
@@ -170,7 +173,7 @@ sequenceDiagram
   A-->>B: 302 to FRONTEND_URL/auth/callback?code=<code>
   B->>A: POST /api/v1/auth/exchange {code}
   A->>A: redeem code (single-use), mint app JWT
-  A-->>B: 200 {token}
+  A-->>B: 200 {token, user, roles}
 ```
 
 Notes on the callback:
@@ -190,7 +193,10 @@ Notes on the callback:
   single-use login code and redirects to `{FRONTEND_URL}/auth/callback?code=<code>`.
   If `FRONTEND_URL` is unset, the app's own base URL is used. The React login page
   reads the `code` query parameter and `POST`s it to `/api/v1/auth/exchange` as
-  `{"code": "<code>"}`, receiving `{"token": "<jwt>"}` in return.
+  `{"code": "<code>"}`, receiving the same body a password login answers:
+  `{"token": "<jwt>", "user": {...}, "roles": [...]}`. With cookie session
+  delivery the token travels in the session cookie and the body carries
+  `user`, `roles` and `csrf_token`.
 - The login code is stored in an `_oidc_login_codes` collection in the identity
   collection's datastore (Mongo or SQL), lives for 60 seconds, and is redeemed
   atomically (delete-on-read), so a code works exactly once even across workers.

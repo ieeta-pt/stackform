@@ -165,7 +165,7 @@ const ana = await send('member', 'register', { body: entered(SIGNUP_FIELDS.membe
 const session = await send('member', 'login', { body: { handle: 'ana', password: 'correct-horse' } });
 report.token = typeof session.token;
 const signedIn = { ...json, Authorization: `Bearer ${session.token}` };
-const viewer = callerOf('member', session.user);
+const viewer = callerOf('member', session);
 report.allowed = [null, viewer, { identity: 'member', roles: ['owner'] }, { identity: 'member' }].map((caller) => allows('ledger', 'delete', caller));
 report.viewerDelete = await send('ledger', 'delete', { id: top.id, headers: signedIn }).catch((error) => error.message);
 report.granted = ['owner', 'viewer'].map((role) => grants(viewer, role));

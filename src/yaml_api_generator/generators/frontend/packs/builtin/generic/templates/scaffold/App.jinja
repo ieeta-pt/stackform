@@ -20,7 +20,7 @@
 import { useState, {% if context.identity_entities %}useEffect, {% endif %}createContext, useContext, type ReactNode } from 'react';
 import { Routes, Route, Link, {% if signs_in %}Navigate, {% endif %}{% if context.identity_entities %}useNavigate, {% endif %}useLocation } from 'react-router-dom';
 import { API_BASE_URL } from './config';
-import { ROLES, allows, grants, {% if login_entity %}callerOf, {% endif %}type Caller } from './access';
+import { ROLES, allows, grants, {% if login_entity or context.identity_entities %}callerOf, {% endif %}type Caller, type Session } from './access';
 import { {% if account_entity %}callOperation, failure, {% endif %}type Operation } from './records';
 {% if account_entity and not login_view %}
 import { Auth } from './auth.tsx';
@@ -86,7 +86,7 @@ export function RoleOptions({ identity }: { identity: string }) {
 }
 
 {% if context.identity_entities %}
-export function ExternalProviders({ collection }: { collection: string }) {
+export function ExternalProviders({ identity, collection }: { identity: string; collection: string }) {
   const [providers, setProviders] = useState<{ name: string; type: string }[]>([]);
   useEffect(() => {
     fetch(`${API_BASE_URL}/${collection}/auth/providers`)
@@ -104,7 +104,7 @@ export function ExternalProviders({ collection }: { collection: string }) {
             key={p.name}
             type="button"
             onClick={() => {
-              localStorage.setItem('sso_logout_path', `${collection}/auth/${p.name}/logout`);
+              localStorage.setItem('sso', JSON.stringify({ identity, logoutPath: `${collection}/auth/${p.name}/logout` }));
               window.location.href = `${API_BASE_URL}/${collection}/auth/${p.name}`;
             }}
             style={{ "{{" }} width: '100%', height: 36, borderRadius: 5, background: 'var(--wf-surface)', border: '1.5px solid var(--wf-line-strong)', color: 'var(--wf-ink)', fontSize: 14, cursor: 'pointer' {{ "}}" }}
@@ -177,7 +177,7 @@ function LoginPage() {
       />
 {% endif %}
 {% if provider_entity %}
-      <ExternalProviders collection="{{ provider_entity.repository_name }}" />
+      <ExternalProviders identity="{{ provider_entity.name }}" collection="{{ provider_entity.repository_name }}" />
 {% endif %}
     </>
   );
@@ -185,7 +185,7 @@ function LoginPage() {
 {% endif %}
 
 {% if context.identity_entities %}
-function AuthCallback({ onToken }: { onToken: (t: string) => void }) {
+function AuthCallback({ onSession }: { onSession: (session: Session) => void }) {
   const navigate = useNavigate();
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get('code');
@@ -199,13 +199,8 @@ function AuthCallback({ onToken }: { onToken: (t: string) => void }) {
       body: JSON.stringify({ code }),
     })
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-{% if context.session_delivery == 'cookie' %}
-      .then(() => {
-        onToken('cookie-session');
-{% else %}
-      .then((data) => {
-        onToken(data.token);
-{% endif %}
+      .then((session: Session) => {
+        onSession(session);
         navigate('/', { replace: true });
       })
       .catch(() => navigate('/login', { replace: true }));
@@ -227,7 +222,6 @@ function App() {
 
 {% if context.identity_entities %}
   const signIn = (signed: string, signer: Caller) => {
-    localStorage.removeItem('sso_logout_path');
     {% if context.session_delivery != 'cookie' %}
     localStorage.setItem('token', signed);
     {% endif %}
@@ -238,20 +232,20 @@ function App() {
 
 {% endif %}
   const logout = async () => {
-    const ssoLogoutPath = localStorage.getItem('sso_logout_path');
+    const { logoutPath } = JSON.parse(localStorage.getItem('sso') ?? '{}');
     {% if context.session_delivery == 'cookie' %}
     await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' }).catch(() => undefined);
     {% endif %}
     {% if context.session_delivery != 'cookie' %}
     localStorage.removeItem('token');
     {% endif %}
-    localStorage.removeItem('sso_logout_path');
+    localStorage.removeItem('sso');
     localStorage.removeItem('caller');
     setToken(null);
     setUser(null);
     setCaller(null);
-    if (ssoLogoutPath) {
-      window.location.href = `${API_BASE_URL}/${ssoLogoutPath}`;
+    if (logoutPath) {
+      window.location.href = `${API_BASE_URL}/${logoutPath}`;
     }
   };
 
@@ -263,24 +257,24 @@ function App() {
     });
     if (!res.ok) throw await failure(res, 'Invalid credentials');
     const data = await res.json();
-    signIn({{ "'cookie-session'" if context.session_delivery == 'cookie' else 'data.token' }}, callerOf('{{ login_entity.name }}', data.user));
+    localStorage.removeItem('sso');
+    signIn({{ "'cookie-session'" if context.session_delivery == 'cookie' else 'data.token' }}, callerOf('{{ login_entity.name }}', data));
     setUser(data.user);
   };
 {% endif %}
 
   {% if context.identity_entities %}
-  {% if context.session_delivery == 'cookie' %}
-  const handleExternalToken = () => signIn('cookie-session', {});
-  {% else %}
-  const handleExternalToken = (t: string) => signIn(t, {});
-  {% endif %}
+  const signInExternally = (session: Session) => {
+    signIn({{ "'cookie-session'" if context.session_delivery == 'cookie' else 'session.token!' }}, callerOf(JSON.parse(localStorage.getItem('sso')!).identity, session));
+    setUser(session.user);
+  };
   {% endif %}
 
   return (
     <AuthContext.Provider value={{ "{{" }} token, user, caller, {% if login_entity %}login, {% endif %}logout {{ "}}" }}>
       <Routes>
         {% if context.identity_entities %}
-        <Route path="/auth/callback" element={<AuthCallback onToken={handleExternalToken} />} />
+        <Route path="/auth/callback" element={<AuthCallback onSession={signInExternally} />} />
         {% endif %}
         {% if signs_in %}
         <Route path="/login" element={<{{ sign_in_page }} />} />

@@ -1,4 +1,5 @@
-"""The generated UI never shows a removed or expired record, on the dev server and on a generated FastAPI app."""
+"""The generated UI never shows a removed or expired record nor offers to write its removal timestamp,
+on the dev server and on a generated FastAPI app."""
 
 import json
 import os
@@ -27,6 +28,7 @@ entities:
       id: { type: id }
       title: { type: string, required: true }
       createdAt: { type: datetime }
+      deletedAt: { type: datetime }
 repositories:
   notes:
     entity: note
@@ -41,6 +43,7 @@ ui:
 """
 
 DRIVER = f"""
+import {{ ENTITY_FIELDS }} from './fields.ts';
 import {{ callOperation, listRecords, readJson }} from './records.ts';
 
 const nativeFetch = globalThis.fetch;
@@ -60,6 +63,8 @@ const opened = (id) => send('get', {{ id }}).then(() => 'shown', (error) => erro
 console.log(JSON.stringify({{
   listed: (await listRecords('note')).map((note) => note.title),
   opened: [await opened(notes.kept), await opened(notes.removed), await opened(notes.expired)],
+  offered: Object.keys(ENTITY_FIELDS.note),
+  stamped: await send('update', {{ id: notes.kept, body: {{ deletedAt: recently }} }}).then(() => 'written', (error) => error.message),
 }}));
 """
 
@@ -97,4 +102,9 @@ def test_removed_and_expired_notes_stay_hidden(project, tmp_path, server):
         )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"listed": ["kept"], "opened": ["shown", "Error: 404", "Error: 404"]}
+    assert json.loads(result.stdout) == {
+        "listed": ["kept"],
+        "opened": ["shown", "Error: 404", "Error: 404"],
+        "offered": ["title", "createdAt"],
+        "stamped": "Error: 422",
+    }

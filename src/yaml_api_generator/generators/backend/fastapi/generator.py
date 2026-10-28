@@ -58,6 +58,7 @@ class FastAPIGenerator(TemplateBasedGenerator):
         env.filters["py_identifier"] = to_py_identifier
         env.filters["py_bool"] = access_filters.py_bool
         env.globals["settings_module"] = "settings"
+        env.globals["runtime_package"] = "dependencies."
         env.filters["py_literal"] = access_filters.py_literal
         env.filters["pagination_config"] = pagination_config
         env.filters["sql_column"] = sql_filters.sql_column
@@ -472,6 +473,7 @@ class FastAPIGenerator(TemplateBasedGenerator):
                 "class_name": to_pascal_case(col_name),
                 "is_sql": context.collection_datastore_type(col_name) in ("postgres", "postgresql"),
                 "expires": col_name in context.expiring_collections,
+                "has_files": col_name in context.file_fields,
             }
             for col_name in context.collections
         ]

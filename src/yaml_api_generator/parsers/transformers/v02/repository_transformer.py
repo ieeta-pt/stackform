@@ -9,6 +9,7 @@ from typing import Any
 
 from yaml_api_generator.ir import CRUD_OPERATIONS, IRCollection, IROperation, IRRepository
 from yaml_api_generator.parsers.yaml_parser import ConfigError
+from yaml_api_generator.runtime.lifecycle import Lifecycle
 from yaml_api_generator.runtime.mongo_operations import with_identity
 from .datastore_transformer import resolve_binding
 
@@ -28,6 +29,14 @@ def _targeted(query: Any, collections: Mapping[str, IRCollection]) -> Any:
     if target is None:
         return {**query, "identity": None, "lifecycle": {}}
     return {"lifecycle": asdict(target.lifecycle), **with_identity(query, target.idField, target.idFormat)}
+
+
+def _joining(query: Any, collections: Mapping[str, IRCollection]) -> Any:
+    """A pipeline or SQL statement reads every other collection it names within that collection's lifecycle."""
+    if not isinstance(query, dict) or not ("sql" in query or query.get("command") == "aggregate"):
+        return query
+    lifecycles = {name: asdict(c.lifecycle) for name, c in collections.items() if c.lifecycle != Lifecycle()}
+    return {**query, "lifecycles": lifecycles}
 
 
 def _including_deleted(query: Any, include_deleted: bool) -> Any:
@@ -181,7 +190,8 @@ class RepositoryTransformer:
                 ops_dict[op_name] = IROperation(
                     name=op_name,
                     query=_including_deleted(
-                        _targeted(query, collections or {}), op_cfg.get("includeDeleted", False)
+                        _joining(_targeted(query, collections or {}), collections or {}),
+                        op_cfg.get("includeDeleted", False),
                     ),
                     handler=handler_resolver(handler),
                 )

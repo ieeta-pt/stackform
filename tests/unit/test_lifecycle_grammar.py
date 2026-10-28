@@ -45,18 +45,6 @@ REJECTED = {
         "softDelete": "deletedAt",
         "operations": {"all": {"handler": "helpers.run", "includeDeleted": True}},
     },
-    "sql-without-include-deleted": {
-        "softDelete": "deletedAt",
-        "operations": {"raw": {"query": {"sql": "SELECT * FROM posts"}}},
-    },
-    "estimated-count-without-include-deleted": {
-        "ttl": {"field": "createdAt", "seconds": 60},
-        "operations": {"count": {"query": {"command": "estimatedDocumentCount"}}},
-    },
-    "bulk-write-include-deleted-false": {
-        "softDelete": "deletedAt",
-        "operations": {"bulk": {"query": {"command": "bulkWrite"}, "includeDeleted": False}},
-    },
     "ttl-zero-seconds": {"ttl": {"field": "createdAt", "seconds": 0}},
     "ttl-without-field": {"ttl": {"seconds": 60}},
     "ttl-unknown-key": {"ttl": {"field": "createdAt", "seconds": 60, "index": True}},
@@ -69,6 +57,22 @@ REJECTED = {
 def test_schema_rejects_misused_lifecycle_keys(tmp_path, version, repository):
     errors = _errors(tmp_path, _spec(version, repository))
     assert {error.code for error in errors} == {"SCHEMA_VALIDATION_ERROR"}
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_every_query_keeps_to_the_lifecycle_without_include_deleted(tmp_path, version):
+    spec = _spec(version, {
+        "softDelete": "deletedAt",
+        "operations": {
+            "count": {"query": {"command": "estimatedDocumentCount"}},
+            "bulk": {"query": {"command": "bulkWrite", "requests": []}},
+            "joined": {"query": {"command": "aggregate", "pipeline": []}},
+        },
+    })
+    operations = _load(tmp_path, spec).repositories["posts"].operations
+    lifecycles = {"posts": {"removal": "deletedAt", "expiry": None}}
+    assert operations["joined"].query["lifecycles"] == lifecycles
+    assert not any(operation.query.get("includeDeleted") for operation in operations.values())
 
 
 @pytest.mark.parametrize("version", VERSIONS)

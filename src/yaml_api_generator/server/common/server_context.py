@@ -13,6 +13,7 @@ from yaml_api_generator.ir import (
 from yaml_api_generator.ir.api import CallerDemand, IRDto, IRPagination, IRRolesConfig
 from yaml_api_generator.ir.when import WhenExpr
 from yaml_api_generator.runtime.access import Roles
+from yaml_api_generator.runtime.lifecycle import Lifecycle
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class RuntimeCollectionDescriptor:
     fields: dict[str, Any]
     datastore: str | None = None
     files: Mapping[str, IRFileField] = field(default_factory=dict)
+    lifecycle: Lifecycle = Lifecycle()
 
 
 @dataclass(frozen=True)

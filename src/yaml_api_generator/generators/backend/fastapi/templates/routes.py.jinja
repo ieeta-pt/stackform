@@ -344,13 +344,18 @@ async def {{ route.operation }}_{{ collection_name }}({{ route.record_id_param }
 async def delete_{{ collection_name }}({{ route.record_id_param }}: str{{ extra_path_params(route) }}{{ request_param(route) }}{{ auth_param(route) }}, {{ svc_dep() }}{{ where_repo_params(route) }}) -> Any:
 {{ request_locals(route, "None") }}
 {{ pre_fetch_guard(route) }}
-{% if route is needs_post_fetch or files %}
+{% set erases_files = files and not ctx.collections[collection_name].lifecycle.removal %}
+{% if route is needs_post_fetch or erases_files %}
     existing = await {{ record_call(route, "get") }}
 {{ post_fetch_guard(route, "existing") }}
 {% endif %}
 {{ bind_inputs(route) }}
 {{ prepare_inputs(route, path_values(route), "None") }}
+{% if erases_files %}
 {{ persist(record_call(route, "delete"), "_files.attached(existing)") }}
+{% else %}
+    return await {{ record_call(route, "delete") }}
+{% endif %}
 
 
 {% endif %}

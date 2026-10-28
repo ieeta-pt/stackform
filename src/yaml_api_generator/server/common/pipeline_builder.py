@@ -139,7 +139,8 @@ class PipelineBuilder:
 
         steps = self._base_steps(route) + self._write_steps(route)
         record_files = self._files.get(route.collection)
-        if record_files is not None and route.operation == "delete":
+        erases = self._ctx.collections[route.collection].lifecycle.removal is None
+        if record_files is not None and route.operation == "delete" and erases:
             steps.append(DiscardFilesStep(record_files))
         return self._pipeline(route, steps)
 

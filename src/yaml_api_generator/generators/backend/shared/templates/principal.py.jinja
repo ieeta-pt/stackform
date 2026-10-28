@@ -5,7 +5,8 @@ import secrets
 from collections.abc import Mapping
 from typing import Any
 
-{% block access_import %}{% endblock %}
+from {{ runtime_package }}access import Roles, held_roles
+from {{ runtime_package }}mongo_lifecycle import MongoLifecycle
 from {{ settings_module }} import settings
 {% if auth.uses_jwt %}
 {% block jwt_import %}{% endblock %}
@@ -92,6 +93,17 @@ _IDENTITIES: dict[str, tuple[str, Roles]] = {
 {% endfor %}
 }
 
+_LIFECYCLES: dict[str, MongoLifecycle] = {
+{% for identity in auth.identity_collections %}
+    "{{ identity.name }}": MongoLifecycle({{ identity.lifecycle | py_literal }}),
+{% endfor %}
+}
+
+
+async def _find_identity(db, identity_collection: str, criteria: dict[str, Any]) -> dict[str, Any] | None:
+    """The identity record `criteria` select, unless it was removed or has expired."""
+    return await db[identity_collection].find_one(_LIFECYCLES[identity_collection].visible(criteria))
+
 
 def _principal_has_role(principal: dict | None, required_role: str) -> bool:
     return required_role in held_roles(principal, ROLE_HIERARCHIES)
@@ -116,7 +128,7 @@ _PASSWORD_IDENTIFIERS: dict[str, str] = {{ password_identifiers | py_literal }}
 
 
 async def find_by_password(db, identity_collection: str, identifier_value: str, password: str) -> dict[str, Any] | None:
-    doc = await db[identity_collection].find_one({_PASSWORD_IDENTIFIERS[identity_collection]: identifier_value})
+    doc = await _find_identity(db, identity_collection, {_PASSWORD_IDENTIFIERS[identity_collection]: identifier_value})
     auth_data = doc.get("_auth") if doc is not None else None
     stored_hash = auth_data.get("passwordHash") if isinstance(auth_data, dict) else None
     return doc if isinstance(stored_hash, str) and verify_password(password, stored_hash) else None
@@ -129,7 +141,7 @@ async def resolve_principal(headers: Mapping[str, str], db) -> dict[str, Any] | 
     claims = decode_jwt_token(bearer_token) if bearer_token is not None else None
     if claims is not None and claims.get("sub") and claims.get("identity_collection") in {{ jwt_issuers | py_literal }}:
         collection = claims["identity_collection"]
-        principal = _principal(collection, await db[collection].find_one({_IDENTITIES[collection][0]: claims["sub"]}))
+        principal = _principal(collection, await _find_identity(db, collection, {_IDENTITIES[collection][0]: claims["sub"]}))
         if principal is not None:
             return principal
 {% endif %}
@@ -137,7 +149,7 @@ async def resolve_principal(headers: Mapping[str, str], db) -> dict[str, Any] | 
     api_key = _extract_api_key(headers)
     if api_key is not None:
         for collection in {{ api_key_identities | py_literal }}:
-            principal = _principal(collection, await db[collection].find_one({"apiKey": hash_api_key(api_key)}))
+            principal = _principal(collection, await _find_identity(db, collection, {"apiKey": hash_api_key(api_key)}))
             if principal is not None:
                 return principal
 {% endif %}

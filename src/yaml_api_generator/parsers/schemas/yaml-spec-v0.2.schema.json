@@ -992,32 +992,6 @@
           { "required": ["ttl"] }
         ]
       },
-      "then": {
-        "properties": {
-          "operations": {
-            "additionalProperties": {
-              "if": {
-                "required": ["query"],
-                "properties": {
-                  "query": {
-                    "anyOf": [
-                      { "required": ["sql"] },
-                      {
-                        "required": ["command"],
-                        "properties": { "command": { "enum": ["bulkWrite", "estimatedDocumentCount"] } }
-                      }
-                    ]
-                  }
-                }
-              },
-              "then": {
-                "required": ["includeDeleted"],
-                "properties": { "includeDeleted": { "const": true } }
-              }
-            }
-          }
-        }
-      },
       "else": {
         "properties": {
           "operations": {

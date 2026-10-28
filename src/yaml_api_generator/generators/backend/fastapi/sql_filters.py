@@ -7,7 +7,8 @@ import sqlalchemy as sa
 from yaml_api_generator.server.common.repositories.sql_schema import column_type
 
 
-def sql_column(name: str, cfg: dict[str, Any], id_field: str) -> str:
+def sql_column(name: str, cfg: dict[str, Any], id_field: str, removal: str | None = None) -> str:
+    """A soft-deleting table states its unique fields as partial indexes instead."""
     field_type = cfg.get("type", "string")
     is_pk = name == id_field or field_type == "id"
 
@@ -16,7 +17,7 @@ def sql_column(name: str, cfg: dict[str, Any], id_field: str) -> str:
         parts.append("primary_key=True")
     elif cfg.get("required"):
         parts.append("nullable=False")
-    if cfg.get("unique"):
+    if cfg.get("unique") and not removal:
         parts.append("unique=True")
     return f"sa.Column({', '.join(parts)})"
 

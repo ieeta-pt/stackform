@@ -2,11 +2,12 @@
 
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from uuid import uuid4
 
 import httpx
 import psycopg
@@ -39,11 +40,17 @@ entities:
       title: {{ type: string, required: true }}
       retiredAt: {{ type: datetime }}
 repositories:
-  users: {{ entity: user }}
+  users: {{ entity: user, softDelete: deletedAt }}
+  searchable:
+    abstract: true
+    operations:
+{inherited}
   removable:
     abstract: true
     softDelete: deletedAt
     ttl: {{ field: createdAt, seconds: 3600 }}
+    operations:
+{inherited}
   notes:
     entity: note
 {lifecycle}
@@ -55,8 +62,22 @@ services:
   drafts: {{ repository: drafts }}
   notes: {{ repository: notes }}
   everything: {{ repository: notes, operation: everything }}
+  current: {{ repository: notes, operation: current }}
+  joined: {{ repository: notes, operation: joined }}
+  revive: {{ repository: notes, operation: revive }}
+  wipe: {{ repository: notes, operation: wipe }}
+  sweep: {{ repository: notes, operation: sweep }}
 {services}
 controllers:
+  users:
+    base_path: /users
+    routes:
+      register: {{ service: users, method: POST, path: "/register", access: public }}
+      delete: {{ service: users, method: DELETE, path: "/{{id}}", access: public }}
+  mine:
+    base_path: /mine
+    routes:
+      list: {{ service: notes, method: GET, path: "", access: "*" }}
   notes:
     base_path: /notes
     routes:
@@ -71,6 +92,7 @@ controllers:
     routes:
       create: {{ service: drafts, method: POST, path: "", access: public }}
       update: {{ service: drafts, method: PATCH, path: "/{{id}}", access: public }}
+      delete: {{ service: drafts, method: DELETE, path: "/{{id}}", access: public }}
   guarded:
     base_path: /guarded
     routes:
@@ -79,6 +101,17 @@ controllers:
     base_path: /archive
     routes:
       everything: {{ service: everything, method: GET, path: "", access: public }}
+  queries:
+    base_path: /queries
+    routes:
+      current: {{ service: current, method: GET, path: "/current", access: public }}
+      joined: {{ service: joined, method: GET, path: "/joined", access: public }}
+      revive: {{ service: revive, method: POST, path: "/revive", access: public }}
+  purge:
+    base_path: /purge
+    routes:
+      wipe: {{ service: wipe, method: DELETE, path: "/one/{{title}}", access: public }}
+      sweep: {{ service: sweep, method: DELETE, path: "/all/{{title}}", access: public }}
 {controllers}
 """
 
@@ -86,16 +119,34 @@ VERSIONS = ("0.2", "0.3")
 """The grammar versions declaring repository softDelete and ttl."""
 
 LIFECYCLES = {
-    "declared": "    softDelete: deletedAt\n    ttl: { field: createdAt, seconds: 3600 }",
+    "declared": "    extends: searchable\n    softDelete: deletedAt\n    ttl: { field: createdAt, seconds: 3600 }",
     "inherited": "    extends: removable",
 }
-"""The notes repository declaring its soft deletion and expiry, or inheriting them from an abstract repository."""
+"""The notes repository declaring its soft deletion and expiry, or inheriting them from an abstract repository.
+
+Either way the `current` operation is inherited from an abstract repository."""
 
 sql_spec = partial(
     _SPEC.format,
     lifecycle=LIFECYCLES["declared"],
     storage='datastores:\n  store: { type: postgres, dsn: "${SQL_DSN}", default: true }',
-    operations='      everything: { includeDeleted: true, query: { sql: "SELECT * FROM notes" } }',
+    inherited='      current: { query: { sql: "SELECT title FROM notes" } }',
+    operations=(
+        '      everything: { includeDeleted: true, query: { sql: "SELECT * FROM notes" } }\n'
+        "      joined:\n"
+        "        query:\n"
+        "          sql: >-\n"
+        "            SELECT d.title FROM notes n JOIN drafts d ON n.title = 'kept'\n"
+        "            UNION ALL SELECT title FROM drafts WHERE title = 'retired'\n"
+        "      revive:\n"
+        "        includeDeleted: true\n"
+        "        query: { sql: \"UPDATE notes SET title = 'revived' WHERE title = 'removed'\" }\n"
+        '      wipe: { query: { sql: "DELETE FROM notes WHERE title = :title", params: { title: $title } } }\n'
+        "      sweep:\n"
+        "        query:\n"
+        '          sql: "DELETE FROM notes WHERE title IN (SELECT title FROM notes WHERE title = :title)"\n'
+        "          params: { title: $title }"
+    ),
     services="",
     controllers="",
 )
@@ -104,22 +155,38 @@ mongo_spec = partial(
     _SPEC.format,
     lifecycle=LIFECYCLES["declared"],
     storage="mongo:\n  uri: ${MONGO_URI:-mongodb://localhost:27017}\n  database: ${MONGO_DB:-notes}",
+    inherited="      current: { query: { command: find, filter: {} } }",
     operations=(
         "      everything: { includeDeleted: true, query: { command: find, filter: {} } }\n"
-        "      current: { query: { command: find, filter: {} } }\n"
+        "      joined:\n"
+        "        query:\n"
+        "          command: aggregate\n"
+        "          pipeline:\n"
+        "            - $match: { title: kept }\n"
+        "            - $lookup: { from: drafts, pipeline: [{ $project: { _id: 0, title: 1 } }], as: drafts }\n"
+        "            - $unionWith: { coll: drafts, pipeline: [{ $match: { title: retired } }] }\n"
+        "            - $project: { _id: 0, title: 1, drafts: 1 }\n"
+        "      revive:\n"
+        "        includeDeleted: true\n"
+        "        query: { command: updateMany, filter: { title: removed }, update: { $set: { title: revived } } }\n"
+        "      batch:\n"
+        "        query:\n"
+        "          command: bulkWrite\n"
+        "          requests: [{ updateMany: { filter: { title: removed }, update: { $set: { title: batched } } } }]\n"
+        "      tally: { query: { command: estimatedDocumentCount } }\n"
         '      wipe: { query: { command: deleteOne, filter: { title: "$title" } } }\n'
         '      sweep: { query: { command: deleteMany, filter: { title: "$title" } } }'
     ),
     services=(
-        "  wipe: { repository: notes, operation: wipe }\n"
-        "  sweep: { repository: notes, operation: sweep }"
+        "  batch: { repository: notes, operation: batch }\n"
+        "  tally: { repository: notes, operation: tally }"
     ),
     controllers=(
-        "  purge:\n"
-        "    base_path: /purge\n"
+        "  bulk:\n"
+        "    base_path: /bulk\n"
         "    routes:\n"
-        '      wipe: { service: wipe, method: DELETE, path: "/one/{title}", access: public }\n'
-        '      sweep: { service: sweep, method: DELETE, path: "/all/{title}", access: public }'
+        '      batch: { service: batch, method: POST, path: "/batch", access: public }\n'
+        '      tally: { service: tally, method: GET, path: "/tally", access: public }'
     ),
 )
 
@@ -214,15 +281,49 @@ def exercise(client: httpx.Client, notes: NotesTable) -> None:
     assert sorted(note["title"] for note in client.get("/api/notes").json()) == ["guarded", "kept"]
 
 
-def exercise_archive(client: httpx.Client, notes: NotesTable) -> None:
-    """The includeDeleted operation behind /archive still returns removed notes."""
+def _titles(response: httpx.Response) -> list[str]:
+    assert response.status_code == 200, response.text
+    return sorted(row["title"] for row in response.json())
+
+
+def exercise_identity(client: httpx.Client) -> None:
+    """A removed user can neither sign in nor use a token issued before, and its email can be registered again."""
+    account = {"email": "gone@example.com", "password": "correct-horse-battery-staple"}
+    registered = client.post("/api/users/register", json=account)
+    assert registered.status_code in (200, 201), registered.text
+    login = client.post("/api/users/login", json=account)
+    assert login.status_code == 200, login.text
+    bearer = {"Authorization": f"Bearer {login.json()['token']}"}
+    assert client.get("/api/mine", headers=bearer).status_code == 200
+    assert client.delete(f"/api/users/{registered.json()['id']}").status_code == 200
+    assert client.post("/api/users/login", json=account).status_code == 401
+    assert client.get("/api/mine", headers=bearer).status_code == 401
+    assert client.post("/api/users/register", json=account).status_code in (200, 201)
+
+
+def _joined_drafts(rows: list[dict]) -> list[dict]:
+    """The drafts a joined query returned: as rows of its own, or nested under the note they joined."""
+    return [draft for row in rows for draft in row.get("drafts", [row])]
+
+
+def exercise_queries(client: httpx.Client, notes: NotesTable) -> None:
+    """Declared operations keep to the lifecycle of every table they touch, and includeDeleted widens reads only:
+    an inherited query hides removed notes, a join hides retired drafts, a write cannot reach a removed note,
+    and a declared delete stamps the removal timestamp in place of erasing."""
     exercise(client, notes)
-    assert {"kept", "removed"} <= {note["title"] for note in client.get("/api/archive").json()}
+    exercise_identity(client)
+    assert {"kept", "removed"} <= set(_titles(client.get("/api/archive")))
+    assert _titles(client.get("/api/queries/current")) == ["guarded", "kept"]
 
+    drafts = {title: client.post("/api/drafts", json={"title": title}).json()["id"] for title in ("live", "retired")}
+    assert client.delete(f"/api/drafts/{drafts['retired']}").status_code == 200
+    joined = client.get("/api/queries/joined")
+    assert joined.status_code == 200, joined.text
+    assert sorted(draft["title"] for draft in _joined_drafts(joined.json())) == ["draft", "live"]
 
-def exercise_declared_deletes(client: httpx.Client, notes: NotesTable) -> None:
-    """Declared deleteOne and deleteMany operations stamp the removal timestamp in place of erasing."""
-    exercise_archive(client, notes)
+    assert client.post("/api/queries/revive").status_code == 200
+    assert notes.rows().items() >= _STORED.items()
+
     for title in ("wiped", "swept"):
         _create(client, title, _recently())
     assert client.delete("/api/purge/one/wiped").status_code == 200
@@ -231,11 +332,21 @@ def exercise_declared_deletes(client: httpx.Client, notes: NotesTable) -> None:
     assert rows["wiped"] and rows["swept"], rows
 
 
+def exercise_bulk(client: httpx.Client, notes: NotesTable) -> None:
+    """A bulk write cannot reach a removed note, and an estimated count counts only the notes in view."""
+    exercise_queries(client, notes)
+    assert client.post("/api/bulk/batch").status_code == 200
+    assert notes.rows().items() >= _STORED.items()
+    tally = client.get("/api/bulk/tally")
+    assert tally.status_code == 200, tally.text
+    assert tally.json() == len(client.get("/api/notes").json())
+
+
 Scenario = Callable[[httpx.Client, NotesTable], None]
 
 
 def verify(
-    serve: Callable[[], AbstractContextManager[httpx.Client]], notes: NotesTable, scenario: Scenario = exercise_archive
+    serve: Callable[[], AbstractContextManager[httpx.Client]], notes: NotesTable, scenario: Scenario = exercise_queries
 ) -> None:
     """Runs `scenario` on one server, then checks that the next one erases the expired note and nothing else."""
     with serve() as client:
@@ -243,3 +354,17 @@ def verify(
     survivors = {title: removed for title, removed in notes.rows().items() if title != "expired"}
     with serve():
         assert wait_until(lambda: notes.rows() == survivors, timeout=15), notes.rows()
+
+
+PROVISIONED = "provisioned@example.com"
+
+
+async def reprovision(
+    create: Callable[[dict], Awaitable[dict]],
+    delete: Callable[[str], Awaitable[object]],
+    upsert: Callable[[str, dict], Awaitable[dict]],
+) -> list[str]:
+    """Provisions the email of a removed user, as a sign-in through a provider does, and returns the two ids."""
+    removed = await create({"id": str(uuid4()), "email": PROVISIONED})
+    await delete(removed["id"])
+    return [removed["id"], (await upsert("email", {"id": str(uuid4()), "email": PROVISIONED}))["id"]]

@@ -105,7 +105,10 @@ that belongs to another record is `404`.
   just stored are deleted.
 - After a successful update, replace or delete, files the record no longer
   references are deleted from the datastore.
-- Deleting a record deletes all of its files.
+- Deleting a record deletes all of its files. A repository with `softDelete`
+  keeps the removed record's files, since the record itself is kept.
+- When a repository with `ttl` purges an expired record, the record's files are
+  deleted with it.
 
 ## Errors
 

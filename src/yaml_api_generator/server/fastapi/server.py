@@ -15,6 +15,7 @@ from ..common.context_builder import build_runtime_context
 from ..common.files import build_file_stores, build_record_files
 from ..common.http_middleware import api_middleware
 from ..common.loader import create_repositories, ensure_spec_dir_importable, initialize_indexes
+from ..common.purges import expiring_purges
 from ..common.server_context import RuntimeContext
 from ..common.repositories import RepositoryRegistry
 from ..common.vendored_packages import install_vendored_packages
@@ -89,6 +90,7 @@ def build_app(yaml_file: str, schema_file: str | Path | None = None) -> FastAPI:
     install_vendored_packages(ir.vendored_imports)
     ctx = build_runtime_context(ir)
     stores = build_file_stores(ir)
+    record_files = build_record_files(ir, stores)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -97,7 +99,7 @@ def build_app(yaml_file: str, schema_file: str | Path | None = None) -> FastAPI:
             for store in stores.values():
                 await store.open()
                 stack.push_async_callback(store.close)
-            purger = Purger(repository.purge_expired for repository in registry.all())
+            purger = Purger(expiring_purges(ir, registry, record_files))
             purger.start()
             stack.push_async_callback(purger.stop)
             yield
@@ -111,6 +113,6 @@ def build_app(yaml_file: str, schema_file: str | Path | None = None) -> FastAPI:
     for cls, args, kwargs in reversed(api_middleware(ir.api)):
         app.add_middleware(cls, *args, **kwargs)
 
-    register_fastapi_routes(app, ctx, registry, build_record_files(ir, stores))
+    register_fastapi_routes(app, ctx, registry, record_files)
 
     return app

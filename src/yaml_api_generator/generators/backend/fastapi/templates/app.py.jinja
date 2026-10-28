@@ -34,7 +34,7 @@ from dependencies.files import FileError
 from dependencies.file_stores import close_file_stores, open_file_stores
 {% endif %}
 from dependencies.lifecycle import Purger
-from dependencies.repositories import expiring_repositories
+from dependencies.repositories import expiring_purges
 from routes import api_router
 {% if ctx.auth.uses_jwt and ctx.session.uses_asymmetric %}
 from routes.jwks import router as jwks_router
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
 {% if uses_mongo %}
     connect_mongo()
 {% if create_mongo_indexes %}
-    await initialize_mongo_indexes({{ mongo_unique_indexes | tojson }})
+    await initialize_mongo_indexes({{ mongo_unique_indexes | py_literal }})
 {% endif %}
 {% endif %}
 {% if uses_sql %}
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 {% if ctx.has_files %}
     await open_file_stores()
 {% endif %}
-    purger = Purger(repository.purge_expired for repository in expiring_repositories())
+    purger = Purger(expiring_purges())
     purger.start()
     yield
     await purger.stop()

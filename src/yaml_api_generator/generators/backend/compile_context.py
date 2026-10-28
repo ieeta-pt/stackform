@@ -15,7 +15,7 @@ Key types:
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, ClassVar
 
 from ...constants import CRUD_OPERATIONS
@@ -320,6 +320,7 @@ class IdentityCollectionDescriptor:
     login: bool = True
     default_role: str | None = None
     declared_login_path: str | None = None
+    lifecycle: dict[str, Any] = field(default_factory=dict)
 
     @property
     def login_path(self) -> str:
@@ -497,20 +498,21 @@ class CompileContext:
         return {ds["type"] for ds in self.datastores.values()}
 
     @property
-    def mongo_unique_indexes(self) -> dict[str, list[str]]:
-        return {
-            name: [
-                field_name
-                for field_name, field in collection["fields"].items()
-                if isinstance(field, dict) and field.get("unique")
-            ]
+    def mongo_unique_indexes(self) -> dict[str, dict[str, Any]]:
+        """Per Mongo collection, its unique fields and the lifecycle whose removed rows they exclude."""
+        indexes = {
+            name: {
+                "lifecycle": asdict(collection["lifecycle"]),
+                "fields": [
+                    field_name
+                    for field_name, field in collection["fields"].items()
+                    if isinstance(field, dict) and field.get("unique")
+                ],
+            }
             for name, collection in self.collections.items()
             if collection["datastore_type"] in {"mongodb", "mongo"}
-            and any(
-                isinstance(field, dict) and field.get("unique")
-                for field in collection["fields"].values()
-            )
         }
+        return {name: index for name, index in indexes.items() if index["fields"]}
 
     def collection_datastore_type(self, collection: str) -> str:
         return self.collections.get(collection, {}).get("datastore_type", "mongodb")

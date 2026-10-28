@@ -12,6 +12,9 @@ import sqlalchemy as sa
 from dependencies.lifecycle import Expiry, Lifecycle
 {% endif %}
 from dependencies.postgres import metadata
+{% if lifecycle.removal %}
+from dependencies.sql_lifecycle import unique_index
+{% endif %}
 from dependencies.sql_types import IsoDateTime, JsonNumber
 from ._sql_ops import SQLRepositoryBase{% for op in operations %}, {{ op | capitalize }}Op{% endfor %}
 
@@ -26,8 +29,13 @@ from {{ generated_base.module }} import {{ generated_base.class_name }}
     "{{ collection_name }}",
     metadata,
 {% for field_name, field_cfg in fields.items() if field_cfg is mapping %}
-    {{ field_name | sql_column(field_cfg, id_field) }},
+    {{ field_name | sql_column(field_cfg, id_field, lifecycle.removal) }},
 {% endfor %}
+{% if lifecycle.removal %}
+{% for field_name, field_cfg in fields.items() if field_cfg is mapping and field_cfg.get("unique") %}
+    unique_index("{{ collection_name }}", "{{ field_name }}", "{{ lifecycle.removal }}"),
+{% endfor %}
+{% endif %}
 {% if collection_type == "auth" and "_auth" not in fields %}
     sa.Column("_auth", sa.JSON(), nullable=True),
 {% endif %}

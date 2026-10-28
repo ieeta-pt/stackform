@@ -175,7 +175,7 @@ repositories:
 
 ### Lifecycle repositories
 
-On a repository with `softDelete` or `ttl`, query operations hide removed and expired rows. `includeDeleted: true` makes an operation see them; `sql`, `bulkWrite` and `estimatedDocumentCount` operations must set it. See [Record lifecycle](lifecycle.md#includedeleted).
+On a repository with `softDelete` or `ttl`, query operations hide removed and expired rows of every collection or table they touch, and their writes reach visible rows only. `includeDeleted: true` makes an operation's reads see them as well. See [Record lifecycle](lifecycle.md#custom-operations).
 
 ### Handler-backed operations
 

@@ -8,6 +8,10 @@ from dependencies.mongodb import get_database as get_mongo_db
 {% if uses_sql %}
 from dependencies.postgres import get_database as get_pg_db
 {% endif %}
+{% if collections | selectattr("expires") | selectattr("has_files") | first is defined %}
+from dependencies.file_stores import record_files
+from dependencies.lifecycle import releasing
+{% endif %}
 {% for col in collections %}
 from repositories.{{ col.name }} import {{ col.class_name }}Repository
 {% endfor %}
@@ -38,10 +42,11 @@ get_{{ col.name }}_repository = repository_provider(*_REPOSITORIES["{{ col.name 
 {% endfor %}
 
 
-def expiring_repositories() -> list:
-    """One repository per collection whose rows expire, bound to the connected datastore."""
+def expiring_purges() -> list:
+    """One purge per collection whose rows expire, discarding the files the erased rows held."""
     return [
 {% for col in collections if col.expires %}
-        {{ col.class_name }}Repository({{ "get_pg_db" if col.is_sql else "get_mongo_db" }}()),
+{% set purge = col.class_name ~ "Repository(" ~ ("get_pg_db" if col.is_sql else "get_mongo_db") ~ "()).purge_expired" %}
+        {{ "releasing(%s, record_files[%r].release)" | format(purge, col.name) if col.has_files else purge }},
 {% endfor %}
     ]

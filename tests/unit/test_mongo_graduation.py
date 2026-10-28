@@ -162,7 +162,7 @@ def _generated_app_dependencies(initialize_indexes) -> dict[str, types.ModuleTyp
         "dependencies.security_headers": security_headers,
         "dependencies.lifecycle": lifecycle,
         "dependencies.repositories": _stub(
-            "dependencies.repositories", expiring_repositories=lambda: []
+            "dependencies.repositories", expiring_purges=lambda: []
         ),
         "conflicts": _stub("conflicts", ConflictError=_Conflict),
         "services": _stub("services"),
@@ -174,10 +174,13 @@ def _generated_app_dependencies(initialize_indexes) -> dict[str, types.ModuleTyp
     }
 
 
+_SLUG_INDEX = {"notes": {"lifecycle": {"removal": None, "expiry": None}, "fields": ["slug"]}}
+
+
 async def _indexes_created_at_startup(
     project_dir: Path, *migration_trees: str
-) -> list[dict[str, list[str]]]:
-    created: list[dict[str, list[str]]] = []
+) -> list[dict[str, dict]]:
+    created: list[dict[str, dict]] = []
 
     async def initialize_indexes(unique_indexes):
         created.append(unique_indexes)
@@ -198,12 +201,12 @@ async def _indexes_created_at_startup(
 class TestGeneratedFastAPIStartup:
     @pytest.mark.asyncio
     async def test_creates_indexes_when_not_graduated(self, tmp_path):
-        assert await _indexes_created_at_startup(tmp_path) == [{"notes": ["slug"]}]
+        assert await _indexes_created_at_startup(tmp_path) == [_SLUG_INDEX]
 
     @pytest.mark.asyncio
     async def test_creates_indexes_under_an_alembic_tree_alone(self, tmp_path):
         created = await _indexes_created_at_startup(tmp_path, "migrations")
-        assert created == [{"notes": ["slug"]}]
+        assert created == [_SLUG_INDEX]
 
     @pytest.mark.asyncio
     async def test_skips_indexes_when_graduated(self, tmp_path):
@@ -223,7 +226,7 @@ def test_generated_mongo_targets_initialize_indexes_before_graduation(
 
     source = (tmp_path / "backend" / startup_file).read_text()
     assert "initialize_indexes" in source
-    assert '{"notes": ["slug"]}' in source
+    assert repr(_SLUG_INDEX) in source
     assert compileall.compile_dir(str(tmp_path / "backend"), quiet=2)
 
 

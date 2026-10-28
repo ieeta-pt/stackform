@@ -1,7 +1,4 @@
 {% extends "principal.py.jinja" %}
-{% block access_import %}
-from access import Roles, held_roles
-{% endblock %}
 {% block jwt_import %}
 from dependencies.jwt_utils import decode_jwt_token
 {% endblock %}

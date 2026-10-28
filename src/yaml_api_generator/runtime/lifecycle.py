@@ -3,9 +3,10 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 PURGE_INTERVAL_SECONDS = 60
 
@@ -30,6 +31,20 @@ class Lifecycle:
 
     removal: str | None = None
     expiry: Expiry | None = None
+
+
+Rows = Iterable[Mapping[str, Any]]
+
+
+def releasing(
+    purge: Callable[[], Awaitable[Rows]], release: Callable[[Rows], Awaitable[object]]
+) -> Callable[[], Awaitable[None]]:
+    """`purge`, handing the rows it erases to `release`."""
+
+    async def purged() -> None:
+        await release(await purge())
+
+    return purged
 
 
 class Purger:

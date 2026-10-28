@@ -51,8 +51,9 @@ class BaseRepository(ABC):
             f"{type(self).__name__} does not support custom operations"
         )
 
-    async def purge_expired(self) -> None:
-        """Erase the rows whose time to live has passed."""
+    async def purge_expired(self, collection_name: str) -> list[dict[str, Any]]:
+        """Erase the rows of `collection_name` whose time to live has passed, returning them."""
+        return []
 
     @abstractmethod
     def connect(self) -> None:

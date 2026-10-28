@@ -33,7 +33,7 @@ async def application(scope, receive, send):
         message = await receive()
         if message["type"] == "lifespan.startup":
 {% if create_mongo_indexes %}
-            await initialize_indexes({{ ctx.mongo_unique_indexes | tojson }})
+            await initialize_indexes({{ ctx.mongo_unique_indexes | py_literal }})
 {% endif %}
             purger.start()
             await send({"type": "lifespan.startup.complete"})

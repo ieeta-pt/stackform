@@ -95,6 +95,7 @@ def _build_collections(
             fields=col.fields,
             datastore=col.datastore,
             files=col.files,
+            lifecycle=col.lifecycle,
         )
         for name, col in ir_collections.items()
     }

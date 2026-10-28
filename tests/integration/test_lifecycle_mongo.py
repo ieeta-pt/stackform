@@ -12,9 +12,9 @@ import pytest
 from pymongo import MongoClient
 
 from tests.integration.support.spec_apps import MONGO_BACKENDS, serve
-from tests.support.lifecycle import EXPIRED, LIFECYCLES, VERSIONS, MongoNotes, exercise_declared_deletes, mongo_spec, verify
+from tests.support.lifecycle import EXPIRED, LIFECYCLES, VERSIONS, MongoNotes, exercise_bulk, mongo_spec, verify
 from yaml_api_generator.cli.compiler import compile_project
-from yaml_api_generator.runtime.mongo_lifecycle import EXPIRY_INDEX
+from yaml_api_generator.runtime.mongo_lifecycle import EXPIRY_INDEX, EXPIRY_INDEX_LAG_SECONDS
 
 pytestmark = pytest.mark.integration
 
@@ -60,10 +60,10 @@ def _database(mongo_uri: str) -> tuple[str, dict[str, str]]:
 def test_removed_and_expired_notes(tmp_path, mongo_uri, ttl_monitor, backend, version, lifecycle):
     spec = _spec(tmp_path, mongo_spec(version=version, lifecycle=LIFECYCLES[lifecycle]))
     database, env = _database(mongo_uri)
-    verify(lambda: serve(backend, spec, env), MongoNotes(mongo_uri, database), exercise_declared_deletes)
+    verify(lambda: serve(backend, spec, env), MongoNotes(mongo_uri, database), exercise_bulk)
     with MongoClient(mongo_uri) as client:
         index = client[database]["notes"].index_information()[EXPIRY_INDEX]
-    assert (index["key"], index["expireAfterSeconds"]) == ([("createdAt", 1)], 3600)
+    assert (index["key"], index["expireAfterSeconds"]) == ([("createdAt", 1)], 3600 + EXPIRY_INDEX_LAG_SECONDS)
 
 
 @pytest.mark.parametrize("backend", MONGO_BACKENDS, ids=lambda backend: backend.name)

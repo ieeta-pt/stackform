@@ -1,10 +1,10 @@
-"""A repository lifecycle expressed as MongoDB filters, pipelines, writes and a TTL index.
+"""A repository lifecycle expressed as MongoDB filters, pipelines, writes and indexes.
 
 A lifecycle is the mapping ``{"removal": field | None, "expiry": {"field", "seconds"} | None}``.
 Writes store the expiry field as a BSON date, the only type a TTL index erases rows by.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
@@ -12,11 +12,17 @@ from typing import Any
 from pymongo import ReturnDocument
 
 EXPIRY_INDEX = "lifecycle_expiry"
+# The TTL index lags the application purge, which also discards the files of the rows it erases.
+EXPIRY_INDEX_LAG_SECONDS = 120
 
+_NON_NULL_BSON_TYPES = [
+    "double", "string", "object", "array", "binData", "objectId", "bool", "date", "regex",
+    "javascript", "int", "timestamp", "long", "decimal", "minKey", "maxKey",
+]
 _DELETES = frozenset({"deleteOne", "findOneAndDelete", "deleteMany"})
-_FILTERED = frozenset({
-    "find", "findOne", "countDocuments", "distinct", "updateOne", "findOneAndUpdate", "updateMany",
-    "replaceOne", "findOneAndReplace", *_DELETES,
+_READS = frozenset({"find", "findOne", "countDocuments", "distinct"})
+_WRITES = frozenset({
+    "updateOne", "findOneAndUpdate", "updateMany", "replaceOne", "findOneAndReplace", *_DELETES,
 })
 _WRITE_OPERATORS = ("$set", "$setOnInsert")
 
@@ -43,20 +49,62 @@ def _expired(expiry: Mapping[str, Any]) -> dict[str, Any]:
 
 
 class MongoLifecycle:
-    def __init__(self, lifecycle: Mapping[str, Any] | None = None, include_deleted: bool = False) -> None:
-        """`include_deleted` keeps removed and expired rows in view; writes still keep to the lifecycle."""
+    def __init__(
+        self,
+        lifecycle: Mapping[str, Any] | None = None,
+        include_deleted: bool = False,
+        joined: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
+        """`include_deleted` keeps removed and expired rows in view of reads; writes still keep to the lifecycle.
+
+        `joined` maps every other collection a pipeline may read to its lifecycle.
+        """
         self._removal = (lifecycle or {}).get("removal")
         self._expiry = (lifecycle or {}).get("expiry")
         removal = [{self._removal: None}] if self._removal else []
         expiry = [{"$expr": {"$not": [_expired(self._expiry)]}}] if self._expiry else []
-        self._conditions = () if include_deleted else (*removal, *expiry)
+        self._conditions = (*removal, *expiry)
+        self._include_deleted = include_deleted
+        self._joined = joined or {}
 
     def visible(self, criteria: Mapping[str, Any] | None = None) -> dict[str, Any]:
         clauses = [dict(clause) for clause in (criteria, *self._conditions) if clause]
         return {"$and": clauses} if len(clauses) > 1 else next(iter(clauses), {})
 
+    def readable(self, criteria: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """`criteria` as a read applies it: confined to visible rows unless removed ones are included."""
+        return dict(criteria or {}) if self._include_deleted else self.visible(criteria)
+
     def pipeline(self, stages: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-        return [{"$match": self.visible()}, *stages] if self._conditions else list(stages)
+        """`stages` reading visible rows only, of this collection and of every collection they join."""
+        head = [{"$match": match}] if (match := self.readable()) else []
+        return [*head, *self._joining(stages)]
+
+    def _joining(self, stages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """`stages` with every stage reading other rows confined to the rows its source keeps in view."""
+        joins: dict[str, Callable[[Any], Any]] = {
+            "$lookup": self._lookup, "$unionWith": self._union, "$graphLookup": self._graph_lookup, "$facet": self._facet,
+        }
+        return [
+            {operator: joins[operator](spec) if operator in joins else spec for operator, spec in stage.items()}
+            for stage in stages
+        ]
+
+    def _of(self, collection: str | None) -> "MongoLifecycle":
+        return MongoLifecycle(self._joined.get(collection or ""), self._include_deleted, self._joined)
+
+    def _lookup(self, spec: Mapping[str, Any]) -> dict[str, Any]:
+        return {**spec, "pipeline": self._of(spec.get("from")).pipeline(spec.get("pipeline") or [])}
+
+    def _union(self, spec: Mapping[str, Any] | str) -> dict[str, Any]:
+        union = spec if isinstance(spec, Mapping) else {"coll": spec}
+        return {**union, "pipeline": self._of(union["coll"]).pipeline(union.get("pipeline") or [])}
+
+    def _graph_lookup(self, spec: Mapping[str, Any]) -> dict[str, Any]:
+        return {**spec, "restrictSearchWithMatch": self._of(spec["from"]).readable(spec.get("restrictSearchWithMatch"))}
+
+    def _facet(self, spec: Mapping[str, Sequence[Mapping[str, Any]]]) -> dict[str, Any]:
+        return {name: self._joining(stages) for name, stages in spec.items()}
 
     def stored(self, document: Mapping[str, Any]) -> dict[str, Any]:
         """`document` as written: its expiry timestamp as a BSON date."""
@@ -89,11 +137,32 @@ class MongoLifecycle:
             return await collection.find_one_and_delete(self.visible(criteria))
         return await collection.find_one_and_update(self.visible(criteria), removal, return_document=ReturnDocument.AFTER)
 
-    async def expire(self, collection: Any) -> None:
-        """Keeps the TTL index that erases expired rows in step with the configured expiry."""
+    def unique(self, field: str) -> dict[str, Any]:
+        """The rows a unique index on `field` holds: those with a value that no delete removed."""
+        return {field: {"$type": _NON_NULL_BSON_TYPES}, **({self._removal: None} if self._removal else {})}
+
+    async def keep_unique(self, collection: Any, field: str) -> None:
+        """Keeps `field` unique among the rows `unique` selects, replacing an index that selects others."""
+        name, rows = f"{field}_1", self.unique(field)
+        index = (await collection.index_information()).get(name)
+        if index is not None and index.get("partialFilterExpression") != rows:
+            await collection.drop_index(name)
+        await collection.create_index(field, name=name, unique=True, partialFilterExpression=rows)
+
+    async def purge(self, collection: Any) -> list[dict[str, Any]]:
+        """Erases the expired rows and returns them, keeping the TTL index that backs this purge."""
+        if self._expiry is None:
+            return []
+        await self._expire(collection)
+        rows = await collection.find({"$expr": _expired(self._expiry)}).to_list(length=None)
+        await collection.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
+        return rows
+
+    async def _expire(self, collection: Any) -> None:
+        """Keeps the TTL index that erases rows the purge missed in step with the configured expiry."""
         if self._expiry is None:
             return
-        field, seconds = self._expiry["field"], self._expiry["seconds"]
+        field, seconds = self._expiry["field"], self._expiry["seconds"] + EXPIRY_INDEX_LAG_SECONDS
         index = (await collection.index_information()).get(EXPIRY_INDEX)
         if index is not None and index["key"] != [(field, 1)]:
             await collection.drop_index(EXPIRY_INDEX)
@@ -106,13 +175,19 @@ class MongoLifecycle:
             )
 
     def scoped(self, query: Mapping[str, Any]) -> dict[str, Any]:
-        """A declared operation's `query` confined to visible rows, writing as `stored` does."""
-        return self._confined(query["command"], query)
+        """A declared operation's `query` confined to visible rows, writing as `stored` does.
 
-    def _confined(self, command: str, spec: Mapping[str, Any]) -> dict[str, Any]:
+        An estimated count, which no filter narrows, becomes an exact count of the rows in view.
+        """
+        counted = query["command"] == "estimatedDocumentCount" and bool(self.readable())
+        return self._confined({**query, **({"command": "countDocuments", "filter": {}} if counted else {})})
+
+    def _confined(self, spec: Mapping[str, Any], command: str | None = None) -> dict[str, Any]:
+        command = command or spec["command"]
         return {
             **spec,
-            **({"filter": self.visible(spec.get("filter"))} if command in _FILTERED else {}),
+            **({"filter": self.readable(spec.get("filter"))} if command in _READS else {}),
+            **({"filter": self.visible(spec.get("filter"))} if command in _WRITES else {}),
             **({"pipeline": self.pipeline(spec.get("pipeline") or [])} if command == "aggregate" else {}),
             **({"document": self.stored(spec["document"])} if "document" in spec else {}),
             **({"documents": [*map(self.stored, spec["documents"])]} if "documents" in spec else {}),
@@ -120,7 +195,7 @@ class MongoLifecycle:
             **({"update": self.stored_update(spec["update"])} if "update" in spec else {}),
             **({"removal": self.removal()} if command in _DELETES and self._removal else {}),
             **({"requests": [
-                {kind: self._confined(kind, request_spec) for kind, request_spec in request.items()}
+                {kind: self._confined(request_spec, kind) for kind, request_spec in request.items()}
                 for request in spec["requests"]
             ]} if "requests" in spec else {}),
         }
@@ -128,5 +203,7 @@ class MongoLifecycle:
 
 def scoped(query: Mapping[str, Any], lifecycle: Mapping[str, Any]) -> dict[str, Any]:
     """`query` scoped to the lifecycle it carries, a target collection's, or else to `lifecycle`."""
-    scope = MongoLifecycle(query.get("lifecycle", lifecycle), query.get("includeDeleted", False))
+    scope = MongoLifecycle(
+        query.get("lifecycle", lifecycle), query.get("includeDeleted", False), query.get("lifecycles")
+    )
     return scope.scoped(query)

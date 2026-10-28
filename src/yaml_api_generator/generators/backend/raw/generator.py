@@ -55,6 +55,7 @@ class RawASGIGenerator(SharedLayersGenerator):
         reject_unsigned_session_algorithm(context)
         env = template_environment(_TEMPLATES_DIR, _SHARED_TEMPLATES_DIR)
         env.globals["settings_module"] = "settings"
+        env.globals["runtime_package"] = ""
         env.filters["path_to_regex"] = _path_to_regex
         env.filters["capitalize_collection"] = to_pascal_case
         env.filters["py_literal"] = access_filters.py_literal

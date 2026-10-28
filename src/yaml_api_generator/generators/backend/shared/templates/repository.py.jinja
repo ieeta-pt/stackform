@@ -108,8 +108,8 @@ class {{ class_name }}Repository{% if generated_base %}({{ generated_base.class_
             return None
         return {k: present_value(v) for k, v in doc.items() if k not in _HIDDEN_FIELDS}
 
-    async def purge_expired(self) -> None:
-        await self._lifecycle.expire(self._col)
+    async def purge_expired(self) -> list[dict[str, Any]]:
+        return await self._lifecycle.purge(self._col)
 
     async def list(self, predicate: Predicate = EVERY_ROW) -> list[dict[str, Any]]:
         cursor = self._col.find(self._lifecycle.visible(predicate.mongo()))

@@ -3,6 +3,7 @@
 Converts IR identity collections and providers into auth configuration descriptors.
 """
 
+from dataclasses import asdict
 from typing import Any
 
 from yaml_api_generator.ir import (
@@ -82,6 +83,7 @@ class AuthBuilder:
                     login=identity.login,
                     default_role=identity.default_role(col),
                     declared_login_path=login_paths.get(name),
+                    lifecycle=asdict(col.lifecycle),
                 )
             )
             if identity.has_password:

@@ -10,21 +10,26 @@ from typing import Any
 import sqlalchemy as sa
 
 from yaml_api_generator.ir import IRCollection
+from yaml_api_generator.runtime.sql_lifecycle import unique_index
 from yaml_api_generator.runtime.sql_types import IsoDateTime, JsonNumber
 
 _JSON_TYPES = frozenset({"array", "object", "file"})
 
 
 def table_from_collection(collection: IRCollection, metadata: sa.MetaData) -> sa.Table:
+    """A soft-deleting table keeps its unique fields unique among the rows no delete removed."""
     columns: list[sa.Column] = []
     constraints: list[sa.SchemaItem] = []
+    removal = collection.lifecycle.removal
 
     for name, cfg in collection.fields.items():
         if not isinstance(cfg, dict):
             continue
         is_pk = name == collection.idField or cfg.get("type") == "id"
-        columns.append(_column(name, cfg, is_pk))
+        columns.append(_column(name, cfg, is_pk, removal))
         constraints.extend(_checks(name, cfg))
+        if removal and cfg.get("unique"):
+            constraints.append(unique_index(collection.name, name, removal))
 
     if collection.type == "auth" and "_auth" not in collection.fields:
         columns.append(sa.Column("_auth", sa.JSON(), nullable=True))
@@ -32,14 +37,14 @@ def table_from_collection(collection: IRCollection, metadata: sa.MetaData) -> sa
     return sa.Table(collection.name, metadata, *columns, *constraints)
 
 
-def _column(name: str, cfg: dict[str, Any], is_pk: bool) -> sa.Column:
+def _column(name: str, cfg: dict[str, Any], is_pk: bool, removal: str | None) -> sa.Column:
     nullable = not (is_pk or bool(cfg.get("required")))
     return sa.Column(
         name,
         column_type(cfg),
         primary_key=is_pk,
         nullable=nullable,
-        unique=True if cfg.get("unique") else None,
+        unique=True if cfg.get("unique") and not removal else None,
     )
 
 

@@ -9,6 +9,7 @@ from ..common.server_context import RuntimeContext
 from ..common.loader import initialize_indexes
 from ..common.pipeline import Pipeline
 from ..common.pipeline_builder import PipelineBuilder
+from ..common.purges import expiring_purges
 from ..common.repositories import RepositoryRegistry
 from ..common.steps import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
 
@@ -28,7 +29,7 @@ class ASGIApp:
     def __init__(self, ctx: RuntimeContext, registry: RepositoryRegistry, ir: IRDocument | None = None) -> None:
         self._registry = registry
         self._ir = ir
-        self._purger = Purger(repository.purge_expired for repository in registry.all())
+        self._purger = Purger(expiring_purges(ir, registry) if ir else ())
         self._routes: dict[str, list[_RouteEntry]] = {}
         builder = PipelineBuilder(ctx=ctx, registry=registry)
 

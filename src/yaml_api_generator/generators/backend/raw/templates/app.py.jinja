@@ -78,7 +78,7 @@ class ASGIApp:
             if message["type"] == "lifespan.startup":
                 connect_db()
 {% if create_mongo_indexes %}
-                await initialize_indexes({{ ctx.mongo_unique_indexes | tojson }})
+                await initialize_indexes({{ ctx.mongo_unique_indexes | py_literal }})
 {% endif %}
                 self._purger = Purger(repository.purge_expired for repository in _expiring_repositories())
                 self._purger.start()

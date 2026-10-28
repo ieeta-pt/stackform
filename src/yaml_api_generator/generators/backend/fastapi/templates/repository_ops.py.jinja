@@ -119,8 +119,8 @@ class RepositoryBase:
             return None
         return {k: present_value(v) for k, v in doc.items() if k != "_id"}
 
-    async def purge_expired(self) -> None:
-        await self._lifecycle.expire(self._col)
+    async def purge_expired(self) -> list[dict[str, Any]]:
+        return await self._lifecycle.purge(self._col)
 
     async def find_by(self, field: str, value: Any) -> dict[str, Any] | None:
         return await self.find_one({field: value})
@@ -169,7 +169,7 @@ class RepositoryBase:
             raise ValueError(f"upsert_by requires a non-null value for key field '{key_field}'")
         changes = {field: value for field, value in data.items() if field != self.ID_FIELD}
         doc = await self._col.find_one_and_update(
-            {key_field: data.get(key_field)},
+            self._lifecycle.visible({key_field: data.get(key_field)}),
             self._lifecycle.stored_update({"$set": changes, "$setOnInsert": self._new_identity(data)}),
             upsert=True,
             return_document=ReturnDocument.AFTER,

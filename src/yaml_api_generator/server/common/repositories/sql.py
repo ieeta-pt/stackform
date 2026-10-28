@@ -107,10 +107,8 @@ class SQLRepository(BaseRepository):
             self._engine = None
             self._schema_ready = False
 
-    async def purge_expired(self) -> None:
-        engine = await self._engine_ready()
-        for lifecycle in self._lifecycles.values():
-            await lifecycle.purge(engine)
+    async def purge_expired(self, collection_name: str) -> list[dict[str, Any]]:
+        return await self._lifecycles[collection_name].purge(await self._engine_ready())
 
     async def list(
         self, collection_name: str, predicate: Predicate = EVERY_ROW
@@ -234,22 +232,17 @@ class SQLRepository(BaseRepository):
     async def upsert_by(
         self, collection_name: str, key_field: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
+        """A hidden row holding the key conflicts with the upsert, as it does with a create."""
         if payload.get(key_field) is None:
             raise ValueError(f"upsert_by requires a non-null value for key field '{key_field}'")
-        table = self._table(collection_name)
         values = self._known_columns(collection_name, payload)
-        statement = pg_insert(table).values(**values)
-        statement = statement.on_conflict_do_update(
-            index_elements=[key_field],
-            set_={k: statement.excluded[k] for k in values if k != self._id_fields[collection_name]},
-        ).returning(table)
+        statement = self._lifecycles[collection_name].upsert(key_field, values, self._id_fields[collection_name])
         with _as_conflict():
             async with await self._begin() as conn:
-                result = await conn.execute(statement)
-                row = self._one(result)
-        return row if row is not None else values
+                row = self._one(await conn.execute(statement))
+        if row is None:
+            raise ConflictError(key_field)
+        return row
 
     async def update(
         self, collection_name: str, document_id: str, payload: dict[str, Any]

@@ -1,4 +1,4 @@
-import json
+import ast
 import re
 import sys
 import types
@@ -15,7 +15,8 @@ from yaml_api_generator.server.common.repositories.mongodb import (
     MongoRepository,
     MongoRepositoryConfig,
 )
-from yaml_api_generator.server.common.repositories.mongodb import _NON_NULL_BSON_TYPES
+from yaml_api_generator.runtime import mongo_lifecycle
+from yaml_api_generator.runtime.mongo_lifecycle import _NON_NULL_BSON_TYPES
 from yaml_api_generator.utils.strings import to_pascal_case, to_py_identifier
 from tests.conftest import VALID_DIR
 
@@ -38,6 +39,9 @@ class _RecordingCollection:
     async def create_index(self, field_name, **kwargs):
         self.store.append((field_name, kwargs))
 
+    async def index_information(self):
+        return {}
+
 
 class _RecordingDatabase:
     def __init__(self):
@@ -49,7 +53,7 @@ class _RecordingDatabase:
 
 def _render_mongodb_module():
     env = Environment(loader=FileSystemLoader(str(_SHARED_DIR)), keep_trailing_newline=True)
-    return env.get_template("mongodb.py.jinja").render(settings_module="settings")
+    return env.get_template("mongodb.py.jinja").render(settings_module="settings", runtime_package="dependencies.")
 
 
 def _exec_initialize_indexes(source, database):
@@ -58,7 +62,8 @@ def _exec_initialize_indexes(source, database):
     settings_module.settings = types.SimpleNamespace(
         MONGO_URI="mongodb://localhost", MONGO_DB="test"
     )
-    with patch.dict(sys.modules, {"settings": settings_module}):
+    runtime = {"dependencies": types.ModuleType("dependencies"), "dependencies.mongo_lifecycle": mongo_lifecycle}
+    with patch.dict(sys.modules, {"settings": settings_module, **runtime}):
         exec(compile(source, "<mongodb>", "exec"), module.__dict__)
     module.__dict__["_db"] = database
     return module.initialize_indexes
@@ -95,7 +100,10 @@ class TestUniqueIndexEmittedAtStartup:
     async def test_initialize_indexes_creates_unique_index_per_field(self):
         database = _RecordingDatabase()
         initialize_indexes = _exec_initialize_indexes(_render_mongodb_module(), database)
-        await initialize_indexes({"users": ["email"], "organizations": ["keycloakOrgId"]})
+        await initialize_indexes({
+            "users": {"lifecycle": {}, "fields": ["email"]},
+            "organizations": {"lifecycle": {}, "fields": ["keycloakOrgId"]},
+        })
 
         indexed = {field for field, _ in database.calls}
         assert indexed == {"email", "keycloakOrgId"}
@@ -105,9 +113,9 @@ class TestUniqueIndexEmittedAtStartup:
         source = _render_app_module()
         match = re.search(r"initialize_mongo_indexes\((\{.*?\})\)", source)
         assert match is not None
-        emitted = json.loads(match.group(1))
-        assert emitted["users"] == ["email"]
-        assert emitted["organizations"] == ["keycloakOrgId"]
+        emitted = ast.literal_eval(match.group(1))
+        assert emitted["users"]["fields"] == ["email"]
+        assert emitted["organizations"]["fields"] == ["keycloakOrgId"]
 
     @pytest.mark.asyncio
     async def test_dev_create_unique_index_uses_unique_flag(self):
@@ -139,7 +147,7 @@ class TestPartialFilterValidity:
     async def _emitted_partial_filter(self):
         database = _RecordingDatabase()
         initialize_indexes = _exec_initialize_indexes(_render_mongodb_module(), database)
-        await initialize_indexes({"users": ["email"]})
+        await initialize_indexes({"users": {"lifecycle": {}, "fields": ["email"]}})
         return database.calls[0][1]["partialFilterExpression"]
 
     def test_emitted_partial_filter_has_no_ne(self):

@@ -462,6 +462,10 @@ class RecordFiles:
     async def discard(self, files: Iterable[FileMetadata]) -> None:
         await self._vault.discard(files)
 
+    async def release(self, records: Iterable[Mapping[str, Any]]) -> None:
+        """Discards every file `records` hold."""
+        await self.discard(chain.from_iterable(map(self.attached, records)))
+
     def _field(self, name: str) -> FileField:
         if name not in self._fields:
             raise StoredFileNotFoundError(f"Unknown file field '{name}'")

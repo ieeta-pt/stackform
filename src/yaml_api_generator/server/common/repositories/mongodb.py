@@ -68,30 +68,6 @@ def _conflict_field(details: dict[str, Any]) -> str | None:
     return None
 
 
-_NON_NULL_BSON_TYPES = [
-    "double",
-    "string",
-    "object",
-    "array",
-    "binData",
-    "objectId",
-    "bool",
-    "date",
-    "regex",
-    "javascript",
-    "int",
-    "timestamp",
-    "long",
-    "decimal",
-    "minKey",
-    "maxKey",
-]
-
-
-def unique_index_partial_filter(field_name: str) -> dict[str, Any]:
-    return {field_name: {"$type": _NON_NULL_BSON_TYPES}}
-
-
 @dataclass(frozen=True)
 class MongoRepositoryConfig:
     uri: str
@@ -133,16 +109,10 @@ class MongoRepository(BaseRepository):
         return self._db[name]
 
     async def create_unique_index(self, collection_name: str, field_name: str) -> None:
-        await self.collection(collection_name).create_index(
-            field_name,
-            unique=True,
-            partialFilterExpression=unique_index_partial_filter(field_name),
-        )
+        await self._lifecycle(collection_name).keep_unique(self.collection(collection_name), field_name)
 
-    async def purge_expired(self) -> None:
-        """MongoDB erases expired rows itself, through the TTL index each lifecycle keeps in place."""
-        for name in self._lifecycles:
-            await self._lifecycle(name).expire(self.collection(name))
+    async def purge_expired(self, collection_name: str) -> list[dict[str, Any]]:
+        return await self._lifecycle(collection_name).purge(self.collection(collection_name))
 
     async def list(
         self, collection_name: str, predicate: Predicate = EVERY_ROW
@@ -248,7 +218,7 @@ class MongoRepository(BaseRepository):
         update_fields = {k: v for k, v in payload.items() if k != id_field}
         with _as_conflict():
             document = await self.collection(collection_name).find_one_and_update(
-                {key_field: payload.get(key_field)},
+                self._visible(collection_name, {key_field: payload.get(key_field)}),
                 self._lifecycle(collection_name).stored_update(
                     {"$set": update_fields, "$setOnInsert": on_insert}
                 ),

@@ -47,6 +47,7 @@ class DRFGenerator(SharedLayersGenerator):
         reject_unsigned_session_algorithm(context)
         env = template_environment(_TEMPLATES_DIR, _SHARED_TEMPLATES_DIR)
         env.globals["settings_module"] = f"{self.dir_prefix}.settings"
+        env.globals["runtime_package"] = f"{self.dir_prefix}."
         env.filters["capitalize_collection"] = to_pascal_case
         env.filters["rule_to_predicate"] = access_filters.rule_to_predicate
         env.filters["py_literal"] = access_filters.py_literal

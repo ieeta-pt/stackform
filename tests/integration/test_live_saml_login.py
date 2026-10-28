@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from html import unescape
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -18,6 +19,7 @@ from tests.integration.support.saml import AuthnRequest, IdentityProvider, live_
 pytestmark = pytest.mark.integration
 
 SPEC = Path(__file__).parents[1] / "fixtures" / "valid" / "auth-saml.yaml"
+V01_SPEC = Path(__file__).parents[1] / "fixtures" / "valid" / "v01-auth-saml.yaml"
 FRONTEND = "http://frontend.test"
 EMAIL = "ada@example.com"
 ORGANIZATION = "ACME"
@@ -74,9 +76,12 @@ def identity_provider() -> Iterator[IdentityProvider]:
 
 
 @contextmanager
-def _serve(backend: Backend, spec: Path, workdir: Path, identity_provider: IdentityProvider) -> Iterator[str]:
+def _serve(
+    backend: Backend, spec: Path, workdir: Path, identity_provider: IdentityProvider, **variables: str
+) -> Iterator[str]:
     env = {
         **os.environ,
+        **variables,
         "DATABASE_URL": f"sqlite+aiosqlite:///{workdir / 'saml.sqlite'}",
         "SAML_IDP_METADATA_URL": identity_provider.metadata_url,
         "JWT_SECRET": "saml-login-secret-of-sufficient-length",
@@ -120,6 +125,14 @@ def minimal_api(request, tmp_path_factory, identity_provider) -> Iterator[str]:
     backend, version = request.param
     workdir = tmp_path_factory.mktemp(f"saml-minimal-{backend.name}-{version}")
     with _serve_minimal(backend, workdir, identity_provider, version, "token-url") as url:
+        yield url
+
+
+@pytest.fixture(scope="module", params=BACKENDS, ids=lambda backend: backend.name)
+def v01_api(request, tmp_path_factory, identity_provider, mongo_uri) -> Iterator[str]:
+    workdir = tmp_path_factory.mktemp(f"saml-v01-{request.param.name}")
+    database = f"saml_v01_{request.param.name}_{uuid4().hex}"
+    with _serve(request.param, V01_SPEC, workdir, identity_provider, MONGO_URI=mongo_uri, MONGO_DB=database) as url:
         yield url
 
 
@@ -320,6 +333,14 @@ async def test_name_id_alone_signs_in_an_identity_of_only_its_identifier(minimal
 
     assert listings[0] == listings[1]
     assert [user["email"] for user in listings[0]] == [EMAIL]
+
+
+async def test_saml_provider_of_a_v01_collection_signs_in(v01_api, identity_provider):
+    async with httpx.AsyncClient(base_url=v01_api, timeout=30) as client:
+        token = await _signed_in(client, identity_provider)
+        users = (await client.get("/users", headers=_bearer(token))).json()
+
+    assert [user["email"] for user in users] == [EMAIL]
 
 
 async def test_session_of_a_saml_login_refreshes(minimal_api, identity_provider):

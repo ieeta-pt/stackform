@@ -1,0 +1,20 @@
+version: "0.1"
+api:
+  basePath: /api
+  version: v1
+providers:
+  corporate:
+    type: saml
+    idp_metadata_url: ${SAML_IDP_METADATA_URL:-http://idp.example.com/metadata}
+    sp_entity_id: https://sp.example.com/metadata
+mongo:
+  uri: ${MONGO_URI:-mongodb://localhost:27017}
+  database: ${MONGO_DB:-saml}
+collections:
+  users:
+    type: auth
+    auth: { identifier: email, via: [corporate] }
+    access: { list: "*" }
+    fields:
+      id: { type: id }
+      email: { type: string, required: true, unique: true }

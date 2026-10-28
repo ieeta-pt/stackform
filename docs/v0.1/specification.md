@@ -158,6 +158,28 @@ Passwords, password hashes and API keys are never returned by any route.
 SAML provider (`idp_metadata_url`, `sp_entity_id`); `auth.via` may list its name
 next to `password` and `apiKey`. Each provider type accepts only its own keys.
 
+```yaml
+providers:
+  corporate:
+    type: saml
+    idp_metadata_url: ${SAML_IDP_METADATA_URL}
+    sp_entity_id: https://sp.example.com/metadata
+collections:
+  users:
+    type: auth
+    auth: { identifier: email, via: [password, corporate] }
+```
+
+A SAML provider listed in `via` signs users in through the
+[SAML routes](../v0.2/Reference/providers/saml.md#generated-routes) under the
+collection path (`/api/users/auth/corporate`, its `/callback`, `/metadata` and
+`/logout`). The assertion's NameID fills the collection's `identifier`, and a
+user signing in for the first time gets a new record. The login code the callback returns is redeemed at `POST /api/auth/exchange`
+for the app token, and the generated UI offers sign-in through the provider.
+`stackform run` and the `fastapi` target serve these routes; the `drf` and `raw`
+targets and `stackform run --raw` reject the provider with
+`BACKEND_FEATURE_UNSUPPORTED`.
+
 ## 7. Roles
 
 An auth collection may declare roles:

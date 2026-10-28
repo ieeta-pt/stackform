@@ -16,6 +16,7 @@ VALID = Path(__file__).parents[1] / "fixtures" / "valid"
 # fixture, provider, type
 PROVIDERS = [
     pytest.param("auth-saml.yaml", "corporate", "SAML", id="saml"),
+    pytest.param("v01-auth-saml.yaml", "corporate", "SAML", id="saml-0.1"),
     pytest.param("auth-oidc-sql.yaml", "keycloak", "OIDC", id="oidc-app"),
 ]
 
@@ -23,7 +24,7 @@ PROVIDERS = [
 def _on_mongo(spec: Path, workdir: Path) -> Path:
     """The spec stored in MongoDB, the one datastore the DRF and raw generators support."""
     document = yaml.safe_load(spec.read_text())
-    del document["datastores"]
+    document.pop("datastores", None)
     moved = workdir / spec.name
     moved.write_text(yaml.safe_dump({**document, "mongo": {"uri": "mongodb://localhost:27017", "database": "db"}}))
     return moved

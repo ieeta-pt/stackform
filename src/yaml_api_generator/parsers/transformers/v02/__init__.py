@@ -3,12 +3,11 @@
 Coordinates specialized transformers to convert v0.2 YAML specifications into IR objects.
 """
 
-from dataclasses import fields as dataclass_fields
 from operator import attrgetter
 from typing import Any
 
 from yaml_api_generator.ir import IRDocument
-from yaml_api_generator.ir.api import IROIDCProvider, IRProvider, IRSAMLProvider, IRSession
+from yaml_api_generator.ir.api import IRSession
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors
 
 from .access_transformer import AccessTransformer
@@ -20,6 +19,7 @@ from .file_transformer import FileStoreRegistry, FileTransformer
 from .identity_transformer import IdentityTransformer
 from .policies_transformer import PoliciesTransformer
 from .policy_expansion import expand_rule_policies
+from .provider_transformer import parse_providers
 from .record_location import id_param, locate_records
 from .repository_transformer import RepositoryTransformer
 from .route_transformer import RouteTransformer
@@ -146,7 +146,7 @@ class V02Transformer:
         if file_route_errors:
             raise ConfigErrors(file_route_errors)
 
-        providers = self._parse_providers(providers_data)
+        providers = parse_providers(providers_data)
 
         dtos, dto_errors = self._dto.transform(dtos_data)
         if dto_errors:
@@ -224,22 +224,6 @@ class V02Transformer:
         if errors:
             raise ConfigErrors(errors)
         return expanded_routes
-
-    def _parse_providers(self, providers_data: dict[str, Any]) -> dict[str, IRProvider]:
-        _CONSTRUCTORS: dict[str, type] = {"oidc": IROIDCProvider, "saml": IRSAMLProvider}
-        providers: dict[str, IRProvider] = {}
-        for name, cfg in providers_data.items():
-            if not isinstance(cfg, dict):
-                continue
-            ctor = _CONSTRUCTORS.get(cfg.get("type"))
-            if ctor is None:
-                continue
-            accepted = {f.name for f in dataclass_fields(ctor)} - {"name"}
-            kwargs = {k: v for k, v in cfg.items() if k in accepted}
-            if ctor is IROIDCProvider and "audiences" in kwargs:
-                kwargs["audiences"] = tuple(kwargs["audiences"])
-            providers[name] = ctor(name=name, **kwargs)
-        return providers
 
 
 def _login_collections(

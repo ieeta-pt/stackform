@@ -18,6 +18,7 @@ from yaml_api_generator.ir import (
 from yaml_api_generator.parsers.yaml_parser import ConfigError, ConfigErrors
 
 from ..v02.datastore_transformer import parse_datastores
+from ..v02.provider_transformer import parse_providers
 from ..v03.pagination import parse_pagination
 from ..v02.record_location import id_param, locate_records
 from .collection_transformer import CollectionTransformer
@@ -111,6 +112,7 @@ class V01Transformer:
             services=services,
             routes=sorted(locate_records(routes, collections, id_param), key=attrgetter("precedence")),
             identityCollections=identity_collections,
+            providers=parse_providers(resolved.get("providers", {})),
             mongo=datastores[default_datastore],
             datastores=datastores,
             default_datastore=default_datastore,

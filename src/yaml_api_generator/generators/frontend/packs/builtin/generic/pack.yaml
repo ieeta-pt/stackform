@@ -19,7 +19,7 @@ components:
           author: { type: string }
           content: { type: string }
       collection: { type: collection, required: true }
-      columns: { type: array }
+      columns: { type: array, items: { type: string }, minItems: 1 }
       searchable: { type: boolean, default: true }
       sortable: { type: boolean, default: true }
       pagination: { type: boolean, default: true }
@@ -29,7 +29,7 @@ components:
     props:
       field_roles: *field_roles
       collection: { type: collection, required: true }
-      columns: { type: array }
+      columns: { type: array, items: { type: string }, minItems: 1 }
       searchable: { type: boolean, default: true }
       sortable: { type: boolean, default: true }
       pagination: { type: boolean, default: true }
@@ -70,7 +70,7 @@ components:
     props:
       field_roles: *field_roles
       collection: { type: collection, required: true }
-      tabs: { type: array, default: [fields, relations, activity, json] }
+      tabs: { type: array, items: { enum: [fields, relations, activity, json] }, minItems: 1, default: [fields, relations, activity, json] }
 
   detail-article:
     props:
@@ -149,26 +149,26 @@ components:
     props:
       collection: { type: collection, required: true }
       title: { type: string }
-      message: { type: string }
+      message: { type: string, default: Create your first record to get started. }
       action_label: { type: string }
 
   empty-onboarding:
     props:
       title: { type: string, required: true }
-      subtitle: { type: string }
+      subtitle: { type: string, default: "A few steps and you're running." }
       steps: { type: array, required: true }
 
   empty-import:
     props:
       collection: { type: collection, required: true }
       title: { type: string }
-      options: { type: array }
+      options: { type: array, items: { enum: [create, import, sample] }, minItems: 1, default: [create, import, sample] }
 
   empty-filtered:
     props:
       collection: { type: collection, required: true }
-      filters: { type: array }
-      message: { type: string }
+      filters: { type: array, default: [] }
+      message: { type: string, default: Try removing a filter to broaden your search. }
 
   empty-inline:
     props:
@@ -192,7 +192,7 @@ components:
   delete-bulk-cascade:
     props:
       collection: { type: collection, required: true }
-      count: { type: number }
+      count: { type: number, default: 1 }
       relations: { type: array }
       onConfirm: { type: function }
 
@@ -215,20 +215,20 @@ components:
     props:
       collection: { type: collection, required: true }
       field_roles: *field_roles
-      fields: { type: array }
-      active_filters: { type: object }
+      fields: { type: array, items: { type: string }, minItems: 1 }
+      active_filters: { type: object, default: {} }
 
   filter-builder:
     props:
       collection: { type: collection, required: true }
-      fields: { type: array }
+      fields: { type: array, items: { type: string }, minItems: 1 }
       rules: { type: array }
 
   filter-facets:
     props:
       collection: { type: collection, required: true }
       field_roles: *field_roles
-      fields: { type: array }
+      fields: { type: array, items: { type: string }, minItems: 1 }
       facets: { type: object }
 
   filter-column:
@@ -241,8 +241,8 @@ components:
     props:
       collection: { type: collection, required: true }
       field_roles: *field_roles
-      collections: { type: array }
-      actions: { type: array }
+      collections: { type: array, items: { type: collection }, default: [] }
+      actions: { type: array, items: { enum: [create] }, default: [create] }
 
   # Bulk action variants (V1-V5)
   bulk-floating:
@@ -250,7 +250,7 @@ components:
       collection: { type: collection, required: true }
       field_roles: *field_roles
       selected: { type: array }
-      actions: { type: array }
+      actions: { type: array, items: { enum: [export, delete] }, default: [export, delete] }
 
   bulk-toolbar:
     props:
@@ -258,20 +258,20 @@ components:
       field_roles: *field_roles
       selected: { type: array }
       total: { type: number }
-      actions: { type: array }
+      actions: { type: array, items: { enum: [export, delete] }, default: [export, delete] }
 
   bulk-edit-drawer:
     props:
       collection: { type: collection, required: true }
       field_roles: *field_roles
       selected: { type: array }
-      fields: { type: array }
+      fields: { type: array, items: { type: string }, minItems: 1 }
 
   bulk-progress:
     props:
       collection: { type: collection, required: true }
       field_roles: *field_roles
-      action: { type: string }
+      action: { type: string, default: Delete }
       current: { type: number }
       total: { type: number }
 
@@ -280,12 +280,12 @@ components:
       collection: { type: collection, required: true }
       field_roles: *field_roles
       selected: { type: array }
-      actions: { type: array }
+      actions: { type: array, items: { enum: [open, edit, copy, delete] }, default: [open, edit, copy, delete] }
 
   # Settings variants (V1-V5)
   settings-sectioned:
     props:
-      sections: { type: array }
+      sections: { type: array, items: { enum: [general, appearance, auth, integrations, danger] }, minItems: 1, default: [general, appearance, auth, integrations, danger] }
 
   settings-yaml:
     props:
@@ -294,11 +294,11 @@ components:
   settings-roles:
     props:
       roles: { type: array }
-      entities: { type: array }
+      entities: { type: array, items: { type: collection } }
 
   settings-schema:
     props:
-      entities: { type: array }
+      entities: { type: array, items: { type: collection } }
 
   settings-danger:
     props:
@@ -336,7 +336,7 @@ components:
   ref-multi-chips:
     props:
       target: { type: string, required: true }
-      values: { type: array }
+      values: { type: array, items: { type: string } }
       onChange: { type: function }
 
   ref-picker-modal:
@@ -353,7 +353,7 @@ components:
   ref-selected-card:
     props:
       target: { type: string, required: true }
-      value: { type: object }
+      value: { type: string }
       onSwap: { type: function }
       onClear: { type: function }
 
@@ -370,6 +370,7 @@ scaffold:
   - config.ts
   - records.ts
   - access.ts
+  - listing.ts
   - auth.tsx
   - fields.ts
   - useRecordForm.ts

@@ -1,27 +1,22 @@
+{% set callbacks = {'create': 'onCreateNew', 'import': 'onImportCsv', 'sample': 'onLoadSample'} %}
 interface EmptyImportProps {
-  onCreateNew?: () => void;
-  onImportCsv?: () => void;
-  onLoadSample?: () => void;
-  entityLabel?: string;
+  {% for option in props.options.value %}
+  {{ callbacks[option] }}?: () => void;
+  {% endfor %}
 }
 
-export function EmptyImport({
-  onCreateNew,
-  onImportCsv,
-  onLoadSample,
-  entityLabel = '{{ entity.name | title }}',
-}: EmptyImportProps) {
+export function EmptyImport({ {% for option in props.options.value %}{{ callbacks[option] }}{{ ', ' if not loop.last }}{% endfor %} }: EmptyImportProps) {
   return (
     <div className="flex justify-center px-4 py-12">
       <div className="text-center w-full" style={{ "{{" }} maxWidth: '680px' {{ "}}" }}>
         <div className="w-[52px] h-[52px] mx-auto mb-5 border-[1.5px] border-dashed border-wf-line rounded-lg flex items-center justify-center">
           <span className="font-title text-xl text-wf-ink-faint">∅</span>
         </div>
-        <h3 className="font-title text-2xl text-wf-ink mb-2">No {entityLabel} records yet</h3>
+        <h3 className="font-title text-2xl text-wf-ink mb-2">{{ '{' }}{{ (props.title.value if props.title else 'No ' ~ (entity.name | title) ~ ' records yet') | tojson }}{{ '}' }}</h3>
         <p className="text-sm text-wf-ink-dim mb-8">Choose how you'd like to get started.</p>
 
-        <div className="grid grid-cols-3 gap-4">
-          {/* Create new */}
+        <div className="grid gap-4" style={{ '{{' }} gridTemplateColumns: 'repeat({{ props.options.value | length }}, minmax(0, 1fr))' {{ '}}' }}>
+          {% if 'create' in props.options.value %}
           <div className="flex flex-col items-center gap-3 p-5 rounded-wf border-[1.5px] border-wf-line bg-wf-surface hover:border-wf-accent transition-colors">
             <div className="w-9 h-9 rounded-md border-[1.5px] border-wf-line-strong bg-wf-fill flex items-center justify-center text-wf-ink-dim text-lg">
               +
@@ -35,7 +30,8 @@ export function EmptyImport({
             </button>
           </div>
 
-          {/* Import CSV */}
+          {% endif %}
+          {% if 'import' in props.options.value %}
           <div className="flex flex-col items-center gap-3 p-5 rounded-wf border-[1.5px] border-wf-line bg-wf-surface hover:border-wf-accent transition-colors">
             <div className="w-9 h-9 rounded-md border-[1.5px] border-wf-line-strong bg-wf-fill flex items-center justify-center text-wf-ink-dim text-lg">
               ↑
@@ -49,7 +45,8 @@ export function EmptyImport({
             </button>
           </div>
 
-          {/* Sample data */}
+          {% endif %}
+          {% if 'sample' in props.options.value %}
           <div className="flex flex-col items-center gap-3 p-5 rounded-wf border-[1.5px] border-wf-line bg-wf-surface hover:border-wf-accent transition-colors">
             <div className="w-9 h-9 rounded-md border-[1.5px] border-wf-line-strong bg-wf-fill flex items-center justify-center text-wf-ink-dim text-lg">
               ≡
@@ -62,6 +59,7 @@ export function EmptyImport({
               Load
             </button>
           </div>
+          {% endif %}
         </div>
       </div>
     </div>

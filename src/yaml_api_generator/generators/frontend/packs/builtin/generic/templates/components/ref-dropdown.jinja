@@ -30,7 +30,7 @@ function Avatar({ src, name }: { src?: string; name: string }) {
 
 export function RefDropdown({
   target = {{ props.target.value | tojson }},
-  value,
+  value{% if props.value %} = {{ props.value.value | tojson }}{% endif %},
   onChange,
   placeholder = `Pick a ${target}...`,
   onCreate,

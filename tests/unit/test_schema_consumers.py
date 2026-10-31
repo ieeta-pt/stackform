@@ -1,4 +1,5 @@
-"""Every key a spec schema accepts is read by some consumer: parser, generator or UI pack.
+"""Every key a spec schema accepts is read by some consumer: parser, generator or UI pack, and every prop a
+pack component declares is read by the UI.
 
 A key counts as consumed when it occurs as an identifier or a string literal in the
 package's Python code, or anywhere in its Jinja templates. Docstrings and dict
@@ -14,6 +15,9 @@ from functools import cache
 from pathlib import Path
 
 import pytest
+
+from yaml_api_generator.generators.frontend.packs.loader import load_pack
+from yaml_api_generator.generators.frontend.renderer import CRUD_PAGES
 
 PACKAGE = Path(__file__).parents[2] / "src" / "yaml_api_generator"
 SCHEMAS = PACKAGE / "parsers" / "schemas"
@@ -109,3 +113,80 @@ def test_every_schema_key_has_a_consumer():
 def test_exempt_key_is_still_an_unconsumed_schema_key(key):
     assert key in _locations()
     assert key in VERBATIM or not _consumed(key)
+
+
+GENERIC = load_pack("generic")
+TEMPLATES = GENERIC.templates_dir
+COMPONENTS = GENERIC.manifest.components
+
+# Declared by the pack without a template: a view using one fails generation naming the missing template.
+TEMPLATELESS = {"auth-centered", "auth-signup-role", "auth-error", "split-pane", "sidebar-layout"}
+
+# Declared pack props no template reads, with what the page uses instead.
+UNREAD_PROPS: dict[tuple[str, str], str] = {
+    ("form-stacked", "mode"): "create or edit follows the route",
+    ("form-sectioned", "mode"): "create or edit follows the route",
+    ("form-preview", "mode"): "create or edit follows the route",
+    ("form-inline-row", "record"): "the rows listed from the collection",
+    ("auth-tabbed", "providers"): "nothing: the page calls no login operation and its provider buttons no provider",
+    ("filter-builder", "rules"): "an empty rule set",
+    ("filter-facets", "facets"): "no facet selected",
+    ("filter-column", "column"): "no column filtered",
+    ("filter-column", "values"): "no column filtered",
+    ("bulk-floating", "selected"): "the rows the user selects",
+    ("bulk-toolbar", "selected"): "the rows the user selects",
+    ("bulk-toolbar", "total"): "the number of listed rows",
+    ("bulk-edit-drawer", "selected"): "the rows the user selects",
+    ("bulk-progress", "current"): "the progress of the running deletion",
+    ("bulk-progress", "total"): "the number of listed rows",
+    ("context-menu", "selected"): "the rows the user selects",
+    ("settings-yaml", "spec"): "a placeholder spec and the generated summary",
+    ("settings-roles", "roles"): "the roles of entities.<e>.roles",
+    ("settings-danger", "actions"): "its fixed action list",
+}
+
+
+@cache
+def _template_text(path: str) -> str:
+    """A template's source with every template it includes or imports macros from."""
+    source = (TEMPLATES / path).read_text()
+    used = re.findall(r"{%\s*(?:include|from)\s+'([^']+)'", source)
+    return "\n".join([source, *map(_template_text, used)])
+
+
+def _reads(component: str, prop: str, kind: str | None) -> bool:
+    """Whether the UI consumes `prop` of `component`: a function prop by its name, the collection through the
+    renderer's entity, a crud slot through the renderer and any other prop through `props` in its template."""
+    if component == "crud":
+        defaults = {COMPONENTS[component]["props"][slot]["default"] for slot in CRUD_PAGES}
+        return prop in CRUD_PAGES or any(_reads(slot, prop, kind) for slot in defaults if prop in COMPONENTS[slot].get("props", {}))
+    text = _template_text(f"components/{component}.jinja")
+    pattern = rf"\b{prop}\b" if kind == "function" else rf"props(\.{prop}\b|\.get\('{prop}'\))"
+    return prop == "collection" or re.search(pattern, text) is not None
+
+
+def _pack_props() -> Iterator[tuple[str, str, str | None]]:
+    for component, declared in COMPONENTS.items():
+        if component not in TEMPLATELESS:
+            for prop, spec in (declared.get("props") or {}).items():
+                yield component, prop, spec.get("type")
+
+
+def test_every_rendered_pack_component_has_a_template():
+    rendered = COMPONENTS.keys() - TEMPLATELESS - {"crud"}
+    assert {name for name in rendered if not (TEMPLATES / "components" / f"{name}.jinja").is_file()} == set()
+
+
+def test_every_pack_prop_is_read_by_the_ui():
+    unread = {(component, prop) for component, prop, kind in _pack_props() if not _reads(component, prop, kind)}
+    assert unread - UNREAD_PROPS.keys() == set()
+
+
+@pytest.mark.parametrize("component", sorted(TEMPLATELESS))
+def test_templateless_component_still_has_no_template(component):
+    assert component in COMPONENTS and not (TEMPLATES / "components" / f"{component}.jinja").exists()
+
+
+@pytest.mark.parametrize(("component", "prop"), sorted(UNREAD_PROPS))
+def test_unread_prop_is_still_declared_and_unread(component, prop):
+    assert not _reads(component, prop, COMPONENTS[component]["props"][prop].get("type"))

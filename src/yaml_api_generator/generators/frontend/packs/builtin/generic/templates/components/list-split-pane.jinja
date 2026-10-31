@@ -78,7 +78,9 @@ export default function {{ view.name | pascal_case }}() {
     );
   }
 
+  {% if props.preview.value %}
   const selectedItem = items.find(i => i.{{ entity.pk_field }} === selectedId);
+  {% endif %}
 
   return (
     <div className="h-full flex flex-col">
@@ -98,7 +100,7 @@ export default function {{ view.name | pascal_case }}() {
       </div>
 
       {/* Split layout: table left, preview right */}
-      <div className="flex-1 overflow-hidden px-6 pb-6" style={{ "{{" }} display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px' {{ "}}" }}>
+      <div className="flex-1 overflow-hidden px-6 pb-6" style={{ "{{" }} display: 'grid', gridTemplateColumns: '{{ '1fr 340px' if props.preview.value else '1fr' }}', gap: '16px' {{ "}}" }}>
 
         {/* Table panel */}
         <div className="flex flex-col overflow-hidden border border-wf-line rounded-wf bg-wf-surface">
@@ -168,6 +170,7 @@ export default function {{ view.name | pascal_case }}() {
           </div>
         </div>
 
+        {% if props.preview.value %}
         {/* Preview card */}
         <div className="wf-card overflow-auto">
           {selectedItem ? (
@@ -226,6 +229,7 @@ export default function {{ view.name | pascal_case }}() {
             </div>
           )}
         </div>
+        {% endif %}
       </div>
     </div>
   );

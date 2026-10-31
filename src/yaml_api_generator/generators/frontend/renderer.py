@@ -6,7 +6,7 @@ from typing import Any
 
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, TemplateNotFound
 
-from yaml_api_generator.ir.ui import GeneratorContext, UIView
+from yaml_api_generator.ir.ui import ComponentNode, GeneratorContext, PropValue, UIView
 from .output import OutputFile
 from yaml_api_generator.ir.pack_manifest import Pack
 
@@ -43,13 +43,10 @@ def _render_scaffold(
         "postcss.config.js",
     }
 
-    crud_views = {
-        name for name, view in context.views.items()
-        if _resolve_pack_component(view, context) == "crud"
-    }
+    roots = {name: _root_node(view, context) for name, view in context.views.items()}
+    crud_views = {name for name, root in roots.items() if root.component == "crud"}
     view_entities = {
-        name: _resolve_entity(view, context, _resolve_pack_component(view, context))
-        for name, view in context.views.items()
+        name: _resolve_entity(_given(root, context), context, root.component) for name, root in roots.items()
     }
 
     for item in context.pack_scaffold:
@@ -195,60 +192,93 @@ def _render_data_layer(
     return files
 
 
+CRUD_PAGES = {"list": "", "form": "Form", "detail": "Detail", "delete": "Delete"}
+"""The page each `crud` slot renders, named by the suffix it adds to the view's page name."""
+
+
 def _render_views(
     env: Environment, pack: Pack, context: GeneratorContext
 ) -> list[OutputFile]:
-    files: list[OutputFile] = []
     output = pack.manifest.output
-    ext = output.extension
-
-    for view_name, view in context.views.items():
-        pack_component = _resolve_pack_component(view, context)
-        component_tree = _build_component_tree(view, context)
-
-        collection = _resolve_collection(view, context)
-        entity = _resolve_entity(view, context, pack_component)
-
-        base_vars = {
-            "view": view,
-            "collection": collection,
-            "entity": entity,
-            "context": context,
-            "pack_config": context.pack_config,
-            "component_tree": component_tree,
-            "props": view.props,
-        }
-
-        if pack_component == "crud":
-            effective = _resolve_effective_props(view, context, "crud")
-            list_comp = effective.get("list", "list-table")
-            pages = [
-                (f"{_pascal(view_name)}", list_comp),
-                (f"{_pascal(view_name)}Form", effective.get("form", "form-stacked")),
-                (f"{_pascal(view_name)}Detail", effective.get("detail", "detail-two-column")),
-            ]
-            for file_stem, sub_component in pages:
-                content = _render(env, f"components/{sub_component}.jinja", base_vars)
-                if content is not None:
-                    files.append(OutputFile(
-                        path=f"{output.pages_dir}/{file_stem}.{ext}",
-                        content=content,
-                        zone="editable",
-                    ))
-        else:
-            content = _render(env, f"components/{pack_component}.jinja", base_vars)
-            if content is not None:
-                files.append(OutputFile(
-                    path=f"{output.pages_dir}/{_pascal(view_name)}.{ext}",
-                    content=content,
-                    zone="editable",
-                ))
-
-    return files
+    return [
+        OutputFile(path=f"{output.pages_dir}/{name}.{output.extension}", content=content, zone="editable")
+        for view_name, view in context.views.items()
+        for name, page, pages in _view_pages(view, context)
+        if (content := _render(env, f"components/{page.component}.jinja", _page_variables(view, page, pages, context)))
+        is not None
+    ]
 
 
-def _resolve_collection(view: UIView, context: GeneratorContext) -> Any:
-    for prop_val in view.props.values():
+def _view_pages(
+    view: UIView, context: GeneratorContext
+) -> list[tuple[str, ComponentNode, dict[str, str] | None]]:
+    """Each page file a view renders, with its component and, for a `crud` view, every page of that view."""
+    root = _root_node(view, context)
+    name = _pascal(view.name)
+    if root.component != "crud":
+        return [(name, root, None)]
+    props = _given(root, context)
+    pages = {slot: name + suffix for slot, suffix in CRUD_PAGES.items()}
+    return [
+        (pages[slot], ComponentNode(slot_node.component, {**props, **slot_node.props}), pages)
+        for slot in CRUD_PAGES
+        for slot_node in [_slot_node(props[slot])]
+    ]
+
+
+def _page_variables(
+    view: UIView, page: ComponentNode, pages: dict[str, str] | None, context: GeneratorContext
+) -> dict[str, Any]:
+    props = _given(page, context)
+    return {
+        "view": view,
+        "collection": _resolve_collection(props, context),
+        "entity": _resolve_entity(props, context, page.component),
+        "context": context,
+        "pack_config": context.pack_config,
+        "component_tree": _build_component_tree(view, context),
+        "props": props,
+        "pages": pages,
+    }
+
+
+def _root_node(view: UIView, context: GeneratorContext) -> ComponentNode:
+    """The pack component a view renders."""
+    return _rendered(ComponentNode(view.component, view.props), context)
+
+
+def _rendered(node: ComponentNode, context: GeneratorContext) -> ComponentNode:
+    """`node` itself, or the render root of the declared component it names, `$prop`s bound to `node`'s props."""
+    declared = context.components.get(node.component)
+    if declared is None:
+        return node
+    bound = {
+        name: node.props.get(value.value) if value.kind == "ref" else value
+        for name, value in declared.render.props.items()
+    }
+    return _rendered(
+        ComponentNode(declared.render.component, {name: value for name, value in bound.items() if value}), context
+    )
+
+
+def _slot_node(value: PropValue) -> ComponentNode:
+    """The component a `component` prop names, bare or with props of its own."""
+    return value.value if value.kind == "component" else ComponentNode(str(value.value), {})
+
+
+def _given(node: ComponentNode, context: GeneratorContext) -> dict[str, PropValue]:
+    """The props `node` passes, over the defaults its pack component declares."""
+    declared = context.pack_components[node.component].props.values()
+    defaults = {
+        prop.name: PropValue("component_ref" if prop.type == "component" else "literal", prop.default)
+        for prop in declared
+        if prop.default is not None
+    }
+    return {**defaults, **node.props}
+
+
+def _resolve_collection(props: dict[str, PropValue], context: GeneratorContext) -> Any:
+    for prop_val in props.values():
         if prop_val.kind == "literal" and isinstance(prop_val.value, str):
             col_ref = _parse_collection_ref(prop_val.value)
             if col_ref and col_ref in context.collections:
@@ -256,45 +286,14 @@ def _resolve_collection(view: UIView, context: GeneratorContext) -> Any:
     return None
 
 
-def _resolve_entity(view: UIView, context: GeneratorContext, pack_component: str) -> Any:
-    for prop_val in view.props.values():
+def _resolve_entity(props: dict[str, PropValue], context: GeneratorContext, pack_component: str) -> Any:
+    for prop_val in props.values():
         if prop_val.kind == "literal" and isinstance(prop_val.value, str):
             if prop_val.value in context.entities:
                 return context.entities[prop_val.value]
     if pack_component.startswith("auth"):
         return next((entity for entity in context.entities.values() if entity.serves_login), None)
     return None
-
-
-def _resolve_effective_props(
-    view: UIView, context: GeneratorContext, pack_component: str
-) -> dict[str, str]:
-    """Resolve component_ref props by merging view props with pack defaults."""
-    pack_def = context.pack_components.get(pack_component)
-    if pack_def is None:
-        return {}
-
-    result: dict[str, str] = {}
-    for prop_name, pack_prop in pack_def.props.items():
-        if pack_prop.type != "component":
-            continue
-        view_prop = view.props.get(prop_name)
-        if view_prop is not None and view_prop.kind == "component_ref":
-            result[prop_name] = str(view_prop.value)
-        elif pack_prop.default is not None:
-            result[prop_name] = str(pack_prop.default)
-    return result
-
-
-def _resolve_pack_component(view: UIView, context: GeneratorContext) -> str:
-    """Get the pack component name for a view. If the view uses a YAML component,
-    follow through to its render tree to get the root pack component."""
-    if view.component in context.pack_components:
-        return view.component
-    yaml_comp = context.components.get(view.component)
-    if yaml_comp:
-        return yaml_comp.render.component
-    return view.component
 
 
 def _build_component_tree(view: UIView, context: GeneratorContext) -> dict[str, Any]:

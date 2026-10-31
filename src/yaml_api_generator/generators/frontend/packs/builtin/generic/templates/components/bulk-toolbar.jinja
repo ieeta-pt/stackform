@@ -2,7 +2,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Allowed, useAuth } from '../__generated__/App';
-import { callOperation, displayValue, listRecords } from '../__generated__/records';
+import { {{ 'callOperation, ' if 'delete' in props.actions.value }}displayValue, listRecords } from '../__generated__/records';
+{% if 'export' in props.actions.value %}
+import { exportRows } from '../__generated__/listing';
+{% endif %}
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -54,6 +57,7 @@ export default function {{ view.name | pascal_case }}() {
   const selectAll = () =>
     setSelectedIds(new Set(items.map(i => i.{{ entity.pk_field }})));
 
+  {% if 'delete' in props.actions.value %}
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.size} {{ entity_plural }}?`)) return;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -65,6 +69,7 @@ export default function {{ view.name | pascal_case }}() {
     setItems(prev => prev.filter(i => !selectedIds.has(i.{{ entity.pk_field }})));
     setSelectedIds(new Set());
   };
+  {% endif %}
 
   if (loading) {
     return (
@@ -116,23 +121,21 @@ export default function {{ view.name | pascal_case }}() {
 
             <div className="flex-1" />
 
-            <button onClick={() => {}} className="wf-btn wf-btn-sm">
-              Edit fields
-            </button>
-            <button onClick={() => {}} className="wf-btn wf-btn-sm">
-              Change status
-            </button>
-            <button onClick={() => {}} className="wf-btn wf-btn-sm">
-              Assign to
-            </button>
-            <button onClick={() => {}} className="wf-btn wf-btn-sm">
+            {% if 'export' in props.actions.value %}
+            <button
+              onClick={() => exportRows(items.filter(i => selectedIds.has(i.{{ entity.pk_field }})), '{{ entity.repository_name }}.json')}
+              className="wf-btn wf-btn-sm"
+            >
               Export
             </button>
+            {% endif %}
+            {% if 'delete' in props.actions.value %}
             {% call allowed(entity, 'delete') %}
             <button onClick={handleBulkDelete} className="wf-btn wf-btn-sm wf-btn-danger">
               Delete
             </button>
             {% endcall %}
+            {% endif %}
             <button
               onClick={() => setSelectedIds(new Set())}
               className="wf-btn wf-btn-sm wf-btn-ghost text-wf-ink-dim"

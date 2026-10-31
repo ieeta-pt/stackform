@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Allowed, useAuth } from '../__generated__/App';
-import { callOperation, displayValue, listRecords } from '../__generated__/records';
+import { {{ 'callOperation, ' if 'delete' in props.actions.value }}displayValue, listRecords } from '../__generated__/records';
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -74,6 +74,7 @@ export default function {{ view.name | pascal_case }}() {
       : new Set(items.map(i => i.{{ entity.pk_field }}))
     );
 
+  {% if 'delete' in props.actions.value %}
   const handleDelete = async () => {
     if (!confirm(`Delete ${selectedIds.size} record(s)?`)) { closeMenu(); return; }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -85,11 +86,14 @@ export default function {{ view.name | pascal_case }}() {
     setSelectedIds(new Set());
     closeMenu();
   };
+  {% endif %}
 
+  {% if 'copy' in props.actions.value %}
   const copyIds = () => {
     navigator.clipboard.writeText([...selectedIds].join('\n'));
     closeMenu();
   };
+  {% endif %}
 
   if (loading) {
     return (
@@ -205,13 +209,15 @@ export default function {{ view.name | pascal_case }}() {
             </span>
           </div>
 
-          {/* Primary actions */}
+          {% if 'open' in props.actions.value %}
           <button
             onClick={() => { navigate(`{{ view.path }}/${menu.targetId}`); closeMenu(); }}
             className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-wf-fill text-wf-ink"
           >
             Open <kbd className="wf-mono">↵</kbd>
           </button>
+          {% endif %}
+          {% if 'edit' in props.actions.value %}
           {% call allowed(entity, 'edit') %}
           <button
             onClick={() => { navigate(`{{ view.path }}/${menu.targetId}/edit`); closeMenu(); }}
@@ -220,17 +226,16 @@ export default function {{ view.name | pascal_case }}() {
             Edit <kbd className="wf-mono">E</kbd>
           </button>
           {% endcall %}
-          <div className="my-1 border-t border-wf-line" />
-
+          {% endif %}
+          {% if 'copy' in props.actions.value %}
           <button
             onClick={copyIds}
             className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-wf-fill text-wf-ink"
           >
             Copy IDs <kbd className="wf-mono">⌘C</kbd>
           </button>
-
-          <div className="my-1 border-t border-wf-line" />
-
+          {% endif %}
+          {% if 'delete' in props.actions.value %}
           {% call allowed(entity, 'delete') %}
           <button
             onClick={handleDelete}
@@ -239,6 +244,7 @@ export default function {{ view.name | pascal_case }}() {
             Delete <kbd className="wf-mono">⌫</kbd>
           </button>
           {% endcall %}
+          {% endif %}
         </div>
       )}
     </div>

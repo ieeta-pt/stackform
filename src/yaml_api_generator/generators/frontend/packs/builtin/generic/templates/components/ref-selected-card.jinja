@@ -14,13 +14,15 @@ interface RefSelectedCardProps {
   value?: string | null;
   onChange?: (id: string | null) => void;
   onSwap?: () => void;
+  onClear?: () => void;
 }
 
 export function RefSelectedCard({
   target = {{ props.target.value | tojson }},
-  value,
+  value{% if props.value %} = {{ props.value.value | tojson }}{% endif %},
   onChange,
   onSwap,
+  onClear,
 }: RefSelectedCardProps) {
   const [record, setRecord] = useState<RefRecord | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,7 +101,7 @@ export function RefSelectedCard({
           </button>
           <button
             type="button"
-            onClick={() => onChange?.(null)}
+            onClick={() => { onChange?.(null); onClear?.(); }}
             className="wf-btn wf-btn-sm text-wf-ink-dim"
             title="Clear selection"
           >

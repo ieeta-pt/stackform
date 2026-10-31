@@ -1,6 +1,8 @@
 {% from 'macros/access.jinja' import allowed %}
+{% from 'macros/delete.jinja' import delete_page, delete_record %}
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+{{ delete_page(pages) }}
 import { Allowed, useAuth } from '../__generated__/App';
 import { callOperation, displayValue } from '../__generated__/records';
 import { Button } from '../__generated__/components/Button';
@@ -12,12 +14,10 @@ import { LoadingSpinner } from '../__generated__/components/LoadingSpinner';
 
 interface {{ entity.name | pascal_case }}TwoColumnProps {
   basePath?: string;
-  onDelete?: (id: string) => void;
 }
 
 export function {{ entity.name | pascal_case }}TwoColumn({
-  basePath = '{{ view.path if view else "/" }}',
-  onDelete
+  basePath = '{{ view.path if view else "/" }}'
 }: {{ entity.name | pascal_case }}TwoColumnProps) {
   const { id } = useParams<{ id: string }>();
   const [record, setRecord] = useState<any>(null);
@@ -90,15 +90,7 @@ export function {{ entity.name | pascal_case }}TwoColumn({
           Edit
         </Button>
         {% endcall %}
-        {% call allowed(entity, 'delete') %}
-        <Button
-          size="sm"
-          variant="danger"
-          onClick={() => { onDelete?.(id!); navigate(basePath); }}
-        >
-          Delete
-        </Button>
-        {% endcall %}
+        {{ delete_record(entity, pages) }}
       </div>
 
       {/* Two-column layout: 1fr main + 280px metadata rail */}

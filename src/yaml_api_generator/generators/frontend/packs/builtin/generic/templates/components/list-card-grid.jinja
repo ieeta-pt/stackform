@@ -1,4 +1,5 @@
 {% from 'macros/access.jinja' import allowed %}
+{% from 'macros/listing.jinja' import search_box %}
 {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
 {% set image_field = entity.fields[roles.image] if roles.image is defined else none %}
 {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
@@ -9,12 +10,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Allowed, useAuth } from '../__generated__/App';
 import { {% if title_field or status_field or author_field %}displayValue, {% endif %}listRecords } from '../__generated__/records';
+import { useListing } from '../__generated__/listing';
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
   {% for field in entity.fields.values() %}
   {{ field.name }}: {% if field.type == 'string' %}string{% elif field.type == 'number' %}number{% elif field.type == 'boolean' %}boolean{% else %}any{% endif %};
   {% endfor %}
+  [field: string]: unknown;
 }
 
 export default function {{ view.name | pascal_case }}() {
@@ -22,6 +25,7 @@ export default function {{ view.name | pascal_case }}() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const listing = useListing(items, {{ entity.fields | list | tojson }}, false);
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -83,8 +87,12 @@ export default function {{ view.name | pascal_case }}() {
       {/* Toolbar */}
       <div className="wf-toolbar px-6 pt-4">
         <h1 className="font-title text-2xl text-wf-ink">{{ entity.name | title }}</h1>
-        <span className="wf-mono text-wf-ink-dim">{items.length} records</span>
+        <span className="wf-mono text-wf-ink-dim">{listing.found} records</span>
         <div className="flex-1" />
+
+        {% if props.searchable.value %}
+        {{ search_box() }}
+        {% endif %}
 
         {/* View toggle */}
         <div className="flex border border-wf-line rounded-[5px] overflow-hidden">
@@ -124,8 +132,8 @@ export default function {{ view.name | pascal_case }}() {
 
       <div className="flex-1 overflow-auto px-6 pb-6">
         {viewMode === 'grid' ? (
-          {% raw %}<div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>{% endraw %}
-            {items.map((item) => (
+          <div className="grid gap-4" style={{ '{{' }} gridTemplateColumns: 'repeat({{ props.columns.value }}, minmax(0, 1fr))' {{ '}}' }}>
+            {listing.rows.map((item) => (
               <div
                 key={item.{{ entity.pk_field }}}
                 onClick={() => navigate(`{{ view.path }}/${item.{{ entity.pk_field }}}`)}
@@ -201,7 +209,7 @@ export default function {{ view.name | pascal_case }}() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {listing.rows.map((item) => (
                   <tr
                     key={item.{{ entity.pk_field }}}
                     onClick={() => navigate(`{{ view.path }}/${item.{{ entity.pk_field }}}`)}

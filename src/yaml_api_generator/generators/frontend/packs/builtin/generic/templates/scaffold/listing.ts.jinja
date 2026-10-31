@@ -1,0 +1,60 @@
+import { useMemo, useState } from 'react';
+import { displayValue } from './records';
+
+type Row = Record<string, unknown>;
+
+export interface Sort {
+  field: string;
+  descending: boolean;
+}
+
+/** Rows a paginated list shows at once. */
+export const PAGE_SIZE = 20;
+
+/** The rows whose `fields` contain `search`, ignoring case. */
+export function matching<T extends Row>(rows: T[], search: string, fields: string[]): T[] {
+  const needle = search.trim().toLowerCase();
+  return needle ? rows.filter((row) => fields.some((field) => displayValue(row[field]).toLowerCase().includes(needle))) : rows;
+}
+
+/** `rows` ordered by `sort`, numbers and text alike in natural order. */
+export function ordered<T extends Row>(rows: T[], sort: Sort | null): T[] {
+  if (!sort) return rows;
+  const sign = sort.descending ? -1 : 1;
+  return [...rows].sort(
+    (a, b) => sign * displayValue(a[sort.field]).localeCompare(displayValue(b[sort.field]), undefined, { numeric: true }),
+  );
+}
+
+/** Saves `rows` as the JSON file `name`. */
+export function exportRows(rows: unknown[], name: string) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' }));
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+/** What a list page shows of `records`: those matching its search, in its order, one page of `PAGE_SIZE` when `paginated`. */
+export function useListing<T extends Row>(records: T[], fields: string[], paginated: boolean) {
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<Sort | null>(null);
+  const [page, setPage] = useState(0);
+  const found = useMemo(() => ordered(matching(records, search, fields), sort), [records, search, sort]);
+  const pages = paginated ? Math.max(1, Math.ceil(found.length / PAGE_SIZE)) : 1;
+  return {
+    rows: paginated ? found.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) : found,
+    found: found.length,
+    search,
+    searchFor: (text: string) => {
+      setSearch(text);
+      setPage(0);
+    },
+    sort,
+    sortBy: (field: string) =>
+      setSort((current) => ({ field, descending: current?.field === field && !current.descending })),
+    page,
+    pages,
+    turnTo: (next: number) => setPage(Math.min(Math.max(next, 0), pages - 1)),
+  };
+}

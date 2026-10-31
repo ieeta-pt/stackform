@@ -46,10 +46,11 @@ entities:
       status: { type: enum, values: [draft, live], default: draft }
       stamp: { type: string, readonly: true }
       owner: { type: ref, ref: member }
+      removedAt: { type: datetime }
 
 repositories:
   members: { entity: member }
-  items: { entity: item }
+  items: { entity: item, softDelete: removedAt }
 
 services:
   members: { repository: members }
@@ -71,24 +72,67 @@ controllers:
 
 REQUIRED_VALUES = {"collection": "item", "component": "list-table", "string": "Title", "array": []}
 
+NAMED_SAMPLES = {
+    "array": {
+        "columns": ["code", "rank"],
+        "fields": ["status", "code"],
+        "sections": [{"title": "Main", "fields": ["code", "rank"]}],
+        "relations": ["owner"],
+        "filters": ["status"],
+    },
+    "object": {"field_roles": {"title": "code", "status": "status", "date": "stamp"}, "active_filters": {"status": "live"}},
+    "string": {"groupBy": "status"},
+}
+
+
+def _sample(name: str, spec: dict):
+    """A value of the prop declared by `spec` other than its default, so its branch is rendered too."""
+    items = spec.get("items", {})
+    if "enum" in items:
+        return items["enum"][-1:]
+    by_type = {
+        "boolean": lambda: not spec.get("default", False),
+        "number": lambda: spec.get("default", 1) + 1,
+        "string": lambda: "Sample",
+        "collection": lambda: "member",
+        "component": lambda: "list-card-grid",
+        "object": dict,
+        "array": lambda: ["member"] if items.get("type") == "collection" else [],
+    }
+    return NAMED_SAMPLES.get(spec["type"], {}).get(name, by_type[spec["type"]]())
+
+
+def _props(component: dict, given) -> dict:
+    return {
+        prop: REQUIRED_VALUES[spec["type"]] if spec.get("required") else given(prop, spec)
+        for prop, spec in (component.get("props") or {}).items()
+        if spec.get("required") or (given and spec["type"] != "function")
+    }
+
 
 def _views() -> dict:
-    """One view per component the pack renders (crud through its scaffold), given the props it requires."""
+    """Per component the pack renders, a view given only the props it requires and one given a sample of every
+    prop, plus a crud view per delete and detail variant, over a collection with and one without soft delete."""
     pack = load_pack("generic")
-    rendered = {"crud"} | {template.stem for template in (pack.templates_dir / "components").glob("*.jinja")}
-    return {
-        name: {
-            "path": f"/{name}",
-            "component": name,
-            "props": {
-                prop: REQUIRED_VALUES[spec.get("type")]
-                for prop, spec in (component.get("props") or {}).items()
-                if spec.get("required")
-            },
-        }
-        for name, component in pack.manifest.components.items()
-        if name in rendered
+    components = pack.manifest.components
+    templates = {"crud"} | {template.stem for template in (pack.templates_dir / "components").glob("*.jinja")}
+    rendered = sorted(components.keys() & templates)
+    slots = [(slot, name) for slot in ("delete", "detail") for name in rendered if name.startswith(f"{slot}-")]
+    views = {
+        f"{name}{suffix}": {"path": f"/{name}{suffix}", "component": name, "props": _props(components[name], given)}
+        for name in rendered
+        for suffix, given in (("", None), ("-sampled", _sample))
     }
+    crud = {
+        f"crud-{collection}-{variant}": {
+            "path": f"/crud-{collection}-{variant}",
+            "component": "crud",
+            "props": {"collection": collection, slot: variant},
+        }
+        for collection in ("item", "member")
+        for slot, variant in slots
+    }
+    return views | crud
 
 
 @pytest.fixture(scope="module")

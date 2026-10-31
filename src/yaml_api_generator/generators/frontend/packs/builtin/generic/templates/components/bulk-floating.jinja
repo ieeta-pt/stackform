@@ -2,7 +2,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Allowed, useAuth } from '../__generated__/App';
-import { callOperation, displayValue, listRecords } from '../__generated__/records';
+import { {{ 'callOperation, ' if 'delete' in props.actions.value }}displayValue, listRecords } from '../__generated__/records';
+{% if 'export' in props.actions.value %}
+import { exportRows } from '../__generated__/listing';
+{% endif %}
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -51,6 +54,7 @@ export default function {{ view.name | pascal_case }}() {
       : new Set(items.map(i => i.{{ entity.pk_field }}))
     );
 
+  {% if 'delete' in props.actions.value %}
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.size} selected records?`)) return;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -62,6 +66,7 @@ export default function {{ view.name | pascal_case }}() {
     setItems(prev => prev.filter(i => !selectedIds.has(i.{{ entity.pk_field }})));
     setSelectedIds(new Set());
   };
+  {% endif %}
 
   if (loading) {
     return (
@@ -168,27 +173,15 @@ export default function {{ view.name | pascal_case }}() {
 
           <span className="w-px h-5 bg-white/20" />
 
+          {% if 'export' in props.actions.value %}
           <button
-            onClick={() => {}}
-            className="text-sm text-white/80 hover:text-white transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => {}}
+            onClick={() => exportRows(items.filter(i => selectedIds.has(i.{{ entity.pk_field }})), '{{ entity.repository_name }}.json')}
             className="text-sm text-white/80 hover:text-white transition-colors"
           >
             Export
           </button>
-          <button
-            onClick={() => {}}
-            className="text-sm text-white/80 hover:text-white transition-colors"
-          >
-            Archive
-          </button>
-
-          <span className="w-px h-5 bg-white/20" />
-
+          {% endif %}
+          {% if 'delete' in props.actions.value %}
           {% call allowed(entity, 'delete') %}
           <button
             onClick={handleBulkDelete}
@@ -198,6 +191,7 @@ export default function {{ view.name | pascal_case }}() {
             Delete
           </button>
           {% endcall %}
+          {% endif %}
 
           <span className="w-px h-5 bg-white/20" />
 

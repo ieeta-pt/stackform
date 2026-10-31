@@ -12,7 +12,7 @@ interface SettingsRolesProps {
   entities?: string[];
 }
 
-export function SettingsRoles({ entities = Object.keys(ACCESS) }: SettingsRolesProps) {
+export function SettingsRoles({ entities = {{ props.entities.value | tojson if props.entities else 'Object.keys(ACCESS)' }} }: SettingsRolesProps) {
   const columns = Array.from(
     new Set(entities.flatMap((entity) => Object.values(ACCESS[entity] ?? {}).flatMap(Object.keys))),
   );

@@ -1,6 +1,6 @@
 {% from 'macros/access.jinja' import allowed %}
 {% from 'macros/field_input.jinja' import field_control, control_imports %}
-{% set editable_fields = entity.fields.values() | rejectattr('name', 'equalto', entity.pk_field) | rejectattr('readonly') | list %}
+{% set editable_fields = entity.fields.values() | rejectattr('name', 'equalto', entity.pk_field) | rejectattr('readonly') | selectattr('name', 'in', props.fields.value if props.fields else entity.fields) | list %}
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Allowed, useAuth } from '../__generated__/App';

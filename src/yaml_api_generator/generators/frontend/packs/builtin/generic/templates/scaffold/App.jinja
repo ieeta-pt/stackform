@@ -86,12 +86,13 @@ export function RoleOptions({ identity }: { identity: string }) {
 }
 
 {% if context.identity_entities %}
-export function ExternalProviders({ identity, collection }: { identity: string; collection: string }) {
+/** The sign-in buttons of the providers `collection` serves, of those named in `only` when given. */
+export function ExternalProviders({ identity, collection, only }: { identity: string; collection: string; only?: string[] }) {
   const [providers, setProviders] = useState<{ name: string; type: string }[]>([]);
   useEffect(() => {
     fetch(`${API_BASE_URL}/${collection}/auth/providers`)
       .then(r => (r.ok ? r.json() : []))
-      .then(setProviders)
+      .then((served: { name: string; type: string }[]) => setProviders(served.filter(p => !only || only.includes(p.name))))
       .catch(() => setProviders([]));
   }, [collection]);
   if (!providers.length) return null;

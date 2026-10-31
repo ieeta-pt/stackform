@@ -10,43 +10,35 @@ interface {{ entity.name | pascal_case }}SectionedFormProps {
 }
 
 {% set all_fields = entity.writable_fields %}
-
-{% set basic_fields = [] %}
-{% set content_fields = [] %}
-{% set publishing_fields = [] %}
-{% set seo_fields = [] %}
-{% set advanced_fields = [] %}
-
-{% for field in all_fields %}
-{% if field.name in ['title', 'name', 'displayName', 'slug', 'email', 'username'] %}
-{% set _ = basic_fields.append(field) %}
-{% elif field.name in ['content', 'body', 'description', 'excerpt', 'bio', 'summary'] %}
-{% set _ = content_fields.append(field) %}
-{% elif field.name in ['status', 'publishedAt', 'publishedOn', 'scheduledAt'] or field.type == 'enum' %}
-{% set _ = publishing_fields.append(field) %}
-{% elif field.name in ['metaTitle', 'metaDescription', 'keywords', 'canonicalUrl', 'ogTitle', 'ogImage'] %}
-{% set _ = seo_fields.append(field) %}
-{% else %}
-{% set _ = advanced_fields.append(field) %}
+{% set groups = [
+  ('Basics', 'Essential information', ['title', 'name', 'displayName', 'slug', 'email', 'username']),
+  ('Content', 'Main content and descriptions', ['content', 'body', 'description', 'excerpt', 'bio', 'summary']),
+  ('Publishing', 'Visibility and scheduling', ['status', 'publishedAt', 'publishedOn', 'scheduledAt'] + all_fields | selectattr('type', 'equalto', 'enum') | map(attribute='name') | list),
+  ('SEO', 'Search engine optimization', ['metaTitle', 'metaDescription', 'keywords', 'canonicalUrl', 'ogTitle', 'ogImage']),
+] %}
+{% set given = props.sections.value if props.sections else groups %}
+{% set sections = [] %}
+{% for section in given %}
+{% set label, description, names = (section.title, '', section.fields) if section is mapping else section %}
+{% set fields = all_fields | selectattr('name', 'in', names) | list %}
+{% if fields or loop.first %}
+{% set _ = sections.append({'label': label, 'description': description, 'fields': fields}) %}
 {% endif %}
 {% endfor %}
+{% set placed = sections | map(attribute='fields') | sum(start=[]) | map(attribute='name') | list %}
+{% set rest = all_fields | rejectattr('name', 'in', placed) | list %}
+{% if rest %}
+{% set _ = sections.append({'label': 'Other', 'description': 'Additional configuration', 'fields': rest}) %}
+{% endif %}
 
-type SectionId = 'basics' | 'content' | 'publishing' | 'seo' | 'advanced';
-
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
-  { id: 'basics', label: 'Basics' },
-  {% if content_fields %}{ id: 'content', label: 'Content' },{% endif %}
-  {% if publishing_fields %}{ id: 'publishing', label: 'Publishing' },{% endif %}
-  {% if seo_fields %}{ id: 'seo', label: 'SEO' },{% endif %}
-  {% if advanced_fields %}{ id: 'advanced', label: 'Advanced' },{% endif %}
-];
+const SECTIONS = {{ sections | map(attribute='label') | list | tojson }};
 
 export function {{ entity.name | pascal_case }}SectionedForm({
   entityId,
   basePath = '{{ view.path if view else "/" }}'
 }: {{ entity.name | pascal_case }}SectionedFormProps) {
   const { values, setValue, mode, submit } = useRecordForm({{ entity.name | tojson }}, entityId);
-  const [activeSection, setActiveSection] = useState<SectionId>('basics');
+  const [activeSection, setActiveSection] = useState(SECTIONS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,16 +96,16 @@ export function {{ entity.name | pascal_case }}SectionedForm({
         >
           {SECTIONS.map(section => (
             <button
-              key={section.id}
+              key={section}
               type="button"
-              onClick={() => setActiveSection(section.id)}
-              className={`wf-sidebar-item text-left ${activeSection === section.id ? 'is-active' : ''}`}
+              onClick={() => setActiveSection(section)}
+              className={`wf-sidebar-item text-left ${activeSection === section ? 'is-active' : ''}`}
             >
               <span
                 className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ "{{" }} background: activeSection === section.id ? 'var(--wf-accent)' : 'var(--wf-line-strong)' {{ "}}" }}
+                style={{ "{{" }} background: activeSection === section ? 'var(--wf-accent)' : 'var(--wf-line-strong)' {{ "}}" }}
               />
-              {section.label}
+              {section}
             </button>
           ))}
         </nav>
@@ -121,93 +113,29 @@ export function {{ entity.name | pascal_case }}SectionedForm({
         {/* Scrollable main content */}
         <main className="flex-1 overflow-y-auto">
           <form id="sectioned-form" onSubmit={handleSubmit} className="max-w-2xl mx-auto py-8 px-6">
-            {/* Basics */}
-            {activeSection === 'basics' && (
+            {% for section in sections %}
+            {activeSection === {{ section.label | tojson }} && (
               <div>
-                <h2 className="font-title text-xl text-wf-ink mb-1">Basics</h2>
-                <p className="text-wf-ink-dim text-sm mb-6">Essential information</p>
+                <h2 className="font-title text-xl text-wf-ink mb-1">{{ section.label }}</h2>
+                {% if section.description %}
+                <p className="text-wf-ink-dim text-sm mb-6">{{ section.description }}</p>
+                {% endif %}
                 <hr className="border-wf-line mb-6" />
                 <div className="space-y-4">
-                  {% for field in basic_fields %}
+                  {% for field in section.fields %}
                   {{ field_input(field, setter='change') }}
                   {% endfor %}
-                  {% if not basic_fields %}
-                  {% for field in all_fields[:1] %}
-                  {{ field_input(field, setter='change') }}
-                  {% endfor %}
-                  {% endif %}
+                  {% if loop.first %}
                   {% for field in entity.credential_fields %}
                   {mode === 'create' && (
                   {{ field_input(field, setter='change') }}
                   )}
                   {% endfor %}
+                  {% endif %}
                 </div>
               </div>
             )}
-
-            {% if content_fields %}
-            {/* Content */}
-            {activeSection === 'content' && (
-              <div>
-                <h2 className="font-title text-xl text-wf-ink mb-1">Content</h2>
-                <p className="text-wf-ink-dim text-sm mb-6">Main content and descriptions</p>
-                <hr className="border-wf-line mb-6" />
-                <div className="space-y-4">
-                  {% for field in content_fields %}
-                  {{ field_input(field, setter='change') }}
-                  {% endfor %}
-                </div>
-              </div>
-            )}
-            {% endif %}
-
-            {% if publishing_fields %}
-            {/* Publishing */}
-            {activeSection === 'publishing' && (
-              <div>
-                <h2 className="font-title text-xl text-wf-ink mb-1">Publishing</h2>
-                <p className="text-wf-ink-dim text-sm mb-6">Visibility and scheduling</p>
-                <hr className="border-wf-line mb-6" />
-                <div className="space-y-4">
-                  {% for field in publishing_fields %}
-                  {{ field_input(field, setter='change') }}
-                  {% endfor %}
-                </div>
-              </div>
-            )}
-            {% endif %}
-
-            {% if seo_fields %}
-            {/* SEO */}
-            {activeSection === 'seo' && (
-              <div>
-                <h2 className="font-title text-xl text-wf-ink mb-1">SEO</h2>
-                <p className="text-wf-ink-dim text-sm mb-6">Search engine optimization</p>
-                <hr className="border-wf-line mb-6" />
-                <div className="space-y-4">
-                  {% for field in seo_fields %}
-                  {{ field_input(field, setter='change') }}
-                  {% endfor %}
-                </div>
-              </div>
-            )}
-            {% endif %}
-
-            {% if advanced_fields %}
-            {/* Advanced */}
-            {activeSection === 'advanced' && (
-              <div>
-                <h2 className="font-title text-xl text-wf-ink mb-1">Advanced</h2>
-                <p className="text-wf-ink-dim text-sm mb-6">Additional configuration</p>
-                <hr className="border-wf-line mb-6" />
-                <div className="space-y-4">
-                  {% for field in advanced_fields %}
-                  {{ field_input(field, setter='change') }}
-                  {% endfor %}
-                </div>
-              </div>
-            )}
-            {% endif %}
+            {% endfor %}
           </form>
         </main>
       </div>

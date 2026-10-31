@@ -20,9 +20,9 @@ interface ActiveFilter {
 {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
 {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
 
-const FILTERABLE_FIELDS = [
+const FILTERABLE_FIELDS: { name: string; label: string }[] = [
   {% for field in entity.fields.values() %}
-  {% if field.name != entity.pk_field %}
+  {% if field.name != entity.pk_field and (not props.fields or field.name in props.fields.value) %}
   { name: '{{ field.name }}', label: '{{ field.name | title }}' },
   {% endif %}
   {% endfor %}
@@ -33,7 +33,9 @@ export default function {{ view.name | pascal_case }}() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>(
+    Object.entries({{ props.active_filters.value | tojson }}).map(([field, value]) => ({ field, value: String(value) })),
+  );
   const [sortField, setSortField] = useState<string>('{{ sortable_fields[0].name if sortable_fields else entity.pk_field }}');
   const [sortAsc, setSortAsc] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);

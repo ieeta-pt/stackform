@@ -6,13 +6,13 @@ import { useRecordForm } from '../__generated__/useRecordForm';
 interface {{ entity.name | pascal_case }}ModalFormProps {
   entityId?: string;
   onSuccess?: (data: Record<string, unknown>) => void;
-  onCancel?: () => void;
+  onClose?: () => void;
 }
 
 export function {{ entity.name | pascal_case }}ModalForm({
   entityId,
   onSuccess,
-  onCancel,
+  onClose,
 }: {{ entity.name | pascal_case }}ModalFormProps) {
   const { values, setValue, mode, submit } = useRecordForm({{ entity.name | tojson }}, entityId);
   const [submitting, setSubmitting] = useState(false);
@@ -34,14 +34,14 @@ export function {{ entity.name | pascal_case }}ModalForm({
   };
 
   return (
-    <div className="wf-overlay z-50" onClick={(e) => e.target === e.currentTarget && onCancel?.()}>
+    <div className="wf-overlay z-50" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className="wf-modal" style={{ "{{" }} minWidth: '440px' {{ "}}" }}>
         {/* Modal header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-title text-lg text-wf-ink">{mode === 'create' ? 'New' : 'Edit'} {{ entity.name | title }}</h2>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={onClose}
             className="wf-btn wf-btn-ghost wf-btn-sm text-wf-ink-dim hover:text-wf-ink"
           >
             ✕
@@ -68,7 +68,7 @@ export function {{ entity.name | pascal_case }}ModalForm({
 
         {/* Modal footer */}
         <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-wf-line">
-          <button type="button" onClick={onCancel} className="wf-btn wf-btn-ghost">
+          <button type="button" onClick={onClose} className="wf-btn wf-btn-ghost">
             Cancel
           </button>
           <button type="submit" form="modal-form" disabled={submitting} className="wf-btn wf-btn-primary">

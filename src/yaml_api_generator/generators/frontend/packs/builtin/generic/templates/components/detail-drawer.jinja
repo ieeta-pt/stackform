@@ -1,4 +1,5 @@
 {% from 'macros/access.jinja' import allowed %}
+{% from 'macros/delete.jinja' import delete_page, delete_record %}
 {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
 {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
 {% set image_field = entity.fields[roles.image] if roles.image is defined else none %}
@@ -6,6 +7,7 @@
 {% set meta_fields = entity.fields.values() | rejectattr('name', 'in', ([entity.pk_field] + (roles.values() | list)) | select | list) | list %}
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+{{ delete_page(pages) }}
 import { Allowed, useAuth } from '../__generated__/App';
 import { Button } from '../__generated__/components/Button';
 {% if meta_fields | selectattr('type', 'equalto', 'enum') | list %}
@@ -18,15 +20,13 @@ interface {{ entity.name | pascal_case }}DrawerProps {
   basePath?: string;
   onClose?: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
 }
 
 export function {{ entity.name | pascal_case }}Drawer({
   record,
   basePath = '{{ view.path if view else "/" }}',
   onClose,
-  onEdit,
-  onDelete
+  onEdit
 }: {{ entity.name | pascal_case }}DrawerProps) {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -126,11 +126,7 @@ export function {{ entity.name | pascal_case }}Drawer({
             Edit
           </Button>
           {% endcall %}
-          {% call allowed(entity, 'delete') %}
-          <Button variant="danger" onClick={onDelete}>
-            Delete
-          </Button>
-          {% endcall %}
+          {{ delete_record(entity, pages) }}
           <Button
             variant="ghost"
             onClick={() => navigate(`${basePath}/${shown.{{ entity.pk_field }}}`)}

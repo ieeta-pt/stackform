@@ -29,7 +29,7 @@ function Avatar({ src, name, size = 'sm' }: { src?: string; name: string; size?:
 
 export function RefMultiChips({
   target = {{ props.target.value | tojson }},
-  values = [],
+  values = {{ (props.get('values').value if 'values' in props else []) | tojson }},
   onChange,
 }: RefMultiChipsProps) {
   const [query, setQuery] = useState('');

@@ -12,7 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'auth', label: 'Auth & roles' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'danger', label: 'Danger zone', danger: true },
-];
+].filter(({ id }) => {{ props.sections.value | tojson }}.includes(id));
 
 interface SettingsSectionedProps {
   appName?: string;
@@ -29,7 +29,7 @@ export function SettingsSectioned({
   initialFont = 'Inter',
   onSave,
 }: SettingsSectionedProps) {
-  const [activeSection, setActiveSection] = useState('appearance');
+  const [activeSection, setActiveSection] = useState(NAV_ITEMS[0].id);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(initialTheme);
   const [brandColor, setBrandColor] = useState(initialBrandColor);
   const [font, setFont] = useState(initialFont);

@@ -11,7 +11,7 @@ interface {{ entity.name | pascal_case }} {
   {% endfor %}
 }
 
-{% set facet_fields = entity.fields.values() | selectattr('type', 'in', ['enum', 'boolean']) | list %}
+{% set facet_fields = entity.fields.values() | selectattr('type', 'in', ['enum', 'boolean']) | selectattr('name', 'in', props.fields.value if props.fields else entity.fields) | list %}
 {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
 {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
 {% set date_field = entity.fields[roles.date] if roles.date is defined else none %}

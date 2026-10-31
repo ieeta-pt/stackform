@@ -102,4 +102,7 @@ class _ComponentGrammar:
         kind = declaration.get("type")
         if kind == "component":
             return {"anyOf": [self.kinds[kind], {"$ref": ref}]}
-        return self.kinds.get(kind) or {key: value for key, value in declaration.items() if key != "required"}
+        if kind in self.kinds:
+            return self.kinds[kind]
+        declared = {key: value for key, value in declaration.items() if key != "required"}
+        return {**declared, "items": self._typed(declared["items"], ref)} if "items" in declared else declared

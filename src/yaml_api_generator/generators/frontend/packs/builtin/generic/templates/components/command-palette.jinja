@@ -1,9 +1,20 @@
 {% from 'macros/access.jinja' import allowed %}
+{% set creates = 'create' in props.actions.value %}
+{% set others = props.collections.value | reject('equalto', entity.name) | list %}
+{% set paths = {} %}
+{% for listed in context.views.values() if listed.component == 'crud' and listed.props.collection %}
+{% set _ = paths.update({listed.props.collection.value: listed.path}) %}
+{% endfor %}
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+{% if creates %}
 import { allows } from '../__generated__/access';
+{% endif %}
 import { Allowed, useAuth } from '../__generated__/App';
 import { displayValue, listRecords } from '../__generated__/records';
+{% if others %}
+import { matching } from '../__generated__/listing';
+{% endif %}
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -17,6 +28,15 @@ interface {{ entity.name | pascal_case }} {
 {% set status_field = entity.fields[roles.status] if roles.status is defined else none %}
 {% set date_field = entity.fields[roles.date] if roles.date is defined else none %}
 
+{% if others %}
+/** The other collections the palette searches, with the key and crud page of each. */
+const OTHERS = [
+  {% for name in others %}
+  { name: {{ name | tojson }}, key: {{ context.entities[name].pk_field | tojson }}, path: {{ paths.get(name) | tojson }} },
+  {% endfor %}
+];
+
+{% endif %}
 interface Action {
   id: string;
   label: string;
@@ -32,8 +52,12 @@ export default function {{ view.name | pascal_case }}() {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { token, caller } = useAuth();
+  const { token{{ ', caller' if creates }} } = useAuth();
   const navigate = useNavigate();
+
+  {% if others %}
+  const [others, setOthers] = useState<Record<string, Record<string, unknown>[]>>({});
+  {% endif %}
 
   useEffect(() => {
     const headers: Record<string, string> = {};
@@ -42,14 +66,20 @@ export default function {{ view.name | pascal_case }}() {
     listRecords('{{ entity.name }}', headers)
       .then(data => { setItems(data); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });
+    {% if others %}
+    Promise.all(OTHERS.map(({ name }) => listRecords(name, headers).then(rows => [name, rows] as const)))
+      .then(entries => setOthers(Object.fromEntries(entries)))
+      .catch(err => setError(err.message));
+    {% endif %}
   }, [token]);
 
   const actions: Action[] = useMemo(() => [
+    {% if creates %}
     ...(allows({{ entity.name | tojson }}, 'create', caller)
       ? [{ id: 'new', label: 'Create {{ entity.name | title }}', shortcut: 'C', handler: () => navigate('{{ view.path }}/new') }]
       : []),
-    { id: 'settings', label: 'Settings', shortcut: ',', handler: () => {} },
-  ], [navigate, caller]);
+    {% endif %}
+  ], [navigate{{ ', caller' if creates }}]);
 
   const matchedItems = useMemo(() =>
     query.trim()
@@ -254,6 +284,28 @@ export default function {{ view.name | pascal_case }}() {
                   ))}
                 </div>
               )}
+
+              {% if others %}
+              {query.trim() && OTHERS.map(({ name, key, path }) => {
+                const rows = others[name] ?? [];
+                const found = matching(rows, query, Object.keys(rows[0] ?? {})).slice(0, 6);
+                return found.length > 0 && (
+                  <div key={name}>
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-medium uppercase tracking-widest text-wf-ink-faint">{name}</p>
+                    {found.map((row) => (
+                      <button
+                        key={displayValue(row[key])}
+                        disabled={!path}
+                        onClick={() => { navigate(`${path}/${displayValue(row[key])}`); closePalette(); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-wf-fill transition-colors"
+                      >
+                        <span className="flex-1 text-sm text-wf-ink truncate wf-mono">{displayValue(row[key])}</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {% endif %}
 
               {/* Actions */}
               {matchedActions.length > 0 && (

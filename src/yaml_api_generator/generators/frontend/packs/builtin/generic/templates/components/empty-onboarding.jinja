@@ -14,7 +14,7 @@ interface EmptyOnboardingProps {
 
 export function EmptyOnboarding({
   title = {{ props.title.value | tojson }},
-  subtitle = 'A few steps and you\'re running.',
+  subtitle = {{ props.subtitle.value | tojson }},
   steps = {{ props.steps.value | tojson }},
 }: EmptyOnboardingProps) {
   return (

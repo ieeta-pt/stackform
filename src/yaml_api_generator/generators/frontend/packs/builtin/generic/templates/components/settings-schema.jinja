@@ -17,7 +17,7 @@ interface SettingsSchemaProps {
 }
 
 const SCHEMA: EntityDef[] = [
-  {% for entity in entities %}
+  {% for entity in entities if not props.entities or entity.name in props.entities.value %}
   {
     name: '{{ entity.name }}',
     color: '{{ PALETTE[loop.index0 % PALETTE | length] }}',

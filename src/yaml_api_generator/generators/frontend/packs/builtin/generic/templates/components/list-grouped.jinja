@@ -14,13 +14,16 @@ interface {{ entity.name | pascal_case }} {
 {% set enum_fields = entity.fields.values() | selectattr('type', 'equalto', 'enum') | list %}
 {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
 {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
-{% set group_field = view.props.groupBy.value if view.props.groupBy else (enum_fields | map(attribute='name') | first) %}
+{% set collapsible = props.collapsible.value %}
+{% set group_field = props.groupBy.value if props.groupBy else (enum_fields | map(attribute='name') | first) %}
 
 export default function {{ view.name | pascal_case }}() {
   const [items, setItems] = useState<{{ entity.name | pascal_case }}[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  {% if collapsible %}
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  {% endif %}
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -83,12 +86,14 @@ export default function {{ view.name | pascal_case }}() {
     return acc;
   }, {});
 
+  {% if collapsible %}
   const toggleGroup = (key: string) =>
     setCollapsedGroups(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  {% endif %}
 
   return (
     <div className="h-full flex flex-col">
@@ -110,20 +115,27 @@ export default function {{ view.name | pascal_case }}() {
       {/* Groups */}
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-3">
         {Object.entries(groups).map(([groupKey, groupItems]) => {
-          const isCollapsed = collapsedGroups.has(groupKey);
+          const isCollapsed = {{ 'collapsedGroups.has(groupKey)' if collapsible else 'false' }};
 
           return (
             <div key={groupKey} className="border border-wf-line rounded-wf overflow-hidden bg-wf-surface">
 
               {/* Group header */}
               <button
+                {% if collapsible %}
                 onClick={() => toggleGroup(groupKey)}
+                aria-expanded={!isCollapsed}
+                {% else %}
+                disabled
+                {% endif %}
                 className="w-full flex items-center gap-3 px-4 py-2.5 bg-wf-fill hover:bg-wf-fill-2 transition-colors border-b border-wf-line"
               >
                 <span className="wf-badge">{groupKey}</span>
                 <span className="wf-mono text-xs text-wf-ink-dim">{groupItems.length}</span>
                 <span className="flex-1" />
+                {% if collapsible %}
                 <span className="text-wf-ink-faint text-xs">{isCollapsed ? '▸' : '▾'}</span>
+                {% endif %}
               </button>
 
               {!isCollapsed && (

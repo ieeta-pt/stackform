@@ -139,6 +139,7 @@ def _build_entity(
             for op, route in routes.items()
             if op in CRUD_OPS
         },
+        removal=ir_col.lifecycle.removal,
     )
 
 

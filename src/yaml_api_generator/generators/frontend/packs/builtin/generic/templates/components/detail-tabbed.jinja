@@ -1,10 +1,17 @@
 {% from 'macros/access.jinja' import allowed %}
+{% from 'macros/delete.jinja' import delete_page, delete_record %}
+{% set roles = props.field_roles.value if props.field_roles is defined else {} %}
+{% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
+{% set status_field = entity.fields[roles.status] if roles.status is defined else none %}
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+{{ delete_page(pages) }}
 import { Allowed, useAuth } from '../__generated__/App';
 import { callOperation, displayValue } from '../__generated__/records';
 import { Button } from '../__generated__/components/Button';
+{% if status_field or entity.fields.values() | selectattr('type', 'equalto', 'enum') | first %}
 import { Badge } from '../__generated__/components/Badge';
+{% endif %}
 import { LoadingSpinner } from '../__generated__/components/LoadingSpinner';
 
 type Tab = 'fields' | 'relations' | 'activity' | 'json';
@@ -20,7 +27,7 @@ export function {{ entity.name | pascal_case }}Tabbed({
   const [record, setRecord] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('fields');
+  const [activeTab, setActiveTab] = useState<Tab>({{ props.tabs.value[0] | tojson }});
   const navigate = useNavigate();
   const { token } = useAuth();
 
@@ -42,9 +49,6 @@ export function {{ entity.name | pascal_case }}Tabbed({
     fetchRecord();
   }, [id, token]);
 
-  {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
-  {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
-  {% set status_field = entity.fields[roles.status] if roles.status is defined else none %}
   {% set relation_fields = entity.fields.values() | selectattr('type', 'equalto', 'relation') | list %}
   {% set non_relation_fields = entity.fields.values() | rejectattr('type', 'equalto', 'relation') | rejectattr('name', 'equalto', entity.pk_field) | list %}
 
@@ -62,12 +66,12 @@ export function {{ entity.name | pascal_case }}Tabbed({
 
   if (!record) return null;
 
-  const tabs: { id: Tab; label: string }[] = [
+  const tabs = ([
     { id: 'fields', label: 'Fields' },
     { id: 'relations', label: 'Relations ({{ relation_fields | length }})' },
     { id: 'activity', label: 'Activity' },
     { id: 'json', label: 'JSON' },
-  ];
+  ] as { id: Tab; label: string }[]).filter(({ id }) => ({{ props.tabs.value | tojson }} as Tab[]).includes(id));
 
   return (
     <div className="p-6 min-h-full bg-wf-bg">
@@ -94,6 +98,7 @@ export function {{ entity.name | pascal_case }}Tabbed({
             Edit
           </Button>
           {% endcall %}
+          {{ delete_record(entity, pages) }}
         </div>
       </div>
 

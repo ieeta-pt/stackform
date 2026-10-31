@@ -151,6 +151,8 @@ class EntityInfo:
     roles: RolesInfo | None = None
     access: dict[str, dict[str, str]] = field(default_factory=dict)
     """Per operation and principal column: `allow`, `deny` or `conditional`."""
+    removal: str | None = None
+    """The timestamp a delete sets instead of erasing the record, when the repository soft-deletes."""
 
     @property
     def operations(self) -> frozenset[str]:

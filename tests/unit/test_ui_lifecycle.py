@@ -65,6 +65,7 @@ console.log(JSON.stringify({{
   opened: [await opened(notes.kept), await opened(notes.removed), await opened(notes.expired)],
   offered: Object.keys(ENTITY_FIELDS.note),
   stamped: await send('update', {{ id: notes.kept, body: {{ deletedAt: recently }} }}).then(() => 'written', (error) => error.message),
+  born: await send('create', {{ body: {{ title: 'born', deletedAt: recently }} }}).then(() => 'written', (error) => error.message),
 }}));
 """
 
@@ -107,4 +108,5 @@ def test_removed_and_expired_notes_stay_hidden(project, tmp_path, server):
         "opened": ["shown", "Error: 404", "Error: 404"],
         "offered": ["title", "createdAt"],
         "stamped": "Error: 422",
+        "born": "Error: 422",
     }

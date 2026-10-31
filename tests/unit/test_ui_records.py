@@ -414,21 +414,23 @@ SERVERS = {
 }
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the generated data layer")
-@pytest.mark.parametrize("server", SERVERS)
-def test_generated_data_layer_drives_every_server(project, tmp_path, server):
-    with SERVERS[server](project, tmp_path) as origin:
-        result = subprocess.run(
-            ["node", "--experimental-strip-types", "--no-warnings", "drive.mjs"],
-            cwd=project / "generated/frontend/src/__generated__",
-            env={**os.environ, "ORIGIN": origin},
-            capture_output=True,
-            text=True,
-        )
-
+def drive(project: Path, origin: str) -> dict:
+    """What the generated data layer reports after driving the server at `origin` through DRIVER."""
+    result = subprocess.run(
+        ["node", "--experimental-strip-types", "--no-warnings", "drive.mjs"],
+        cwd=project / "generated/frontend/src/__generated__",
+        env={**os.environ, "ORIGIN": origin},
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def driven(invalid: str) -> dict:
+    """DRIVER's report from a server that refuses a body missing `code` with the message `invalid`."""
     every_row = ["c6", "c5", "c4", "c3", "c2", "c1", "c0"]
-    assert json.loads(result.stdout) == {
+    return {
         "ledger": every_row,
         "page": every_row,
         "feed": every_row,
@@ -436,7 +438,7 @@ def test_generated_data_layer_drives_every_server(project, tmp_path, server):
         "ledgerAfterEdit": 7,
         "fetched": 99,
         "anonymousDelete": "Authentication required",
-        "invalid": INVALID[server],
+        "invalid": invalid,
         "identities": [["member"], ["member"]],
         "token": "string",
         "allowed": [False, False, True, True],
@@ -449,3 +451,12 @@ def test_generated_data_layer_drives_every_server(project, tmp_path, server):
         "signed": [[True, "hello", "c6", "ana"]],
         "read": [True, "hello", "c6", None],
     }
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the generated data layer")
+@pytest.mark.parametrize("server", SERVERS)
+def test_generated_data_layer_drives_every_server(project, tmp_path, server):
+    with SERVERS[server](project, tmp_path) as origin:
+        report = drive(project, origin)
+
+    assert report == driven(INVALID[server])

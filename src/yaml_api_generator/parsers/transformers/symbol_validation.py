@@ -2,7 +2,8 @@
 
 A repository operation's query resolves ``$<symbol>`` references against the
 slugs of the routes that reach it; nothing else is ambient (there is no
-principal or request root). Access-rule ``where`` and ``bind`` expressions
+principal or request root). An abstract repository's operations resolve in
+every repository extending it, which inherits them. Access-rule ``where`` and ``bind`` expressions
 resolve references against the same pre-authorization namespace: route slugs
 plus identity and request symbols declared by that rule's ``given:`` mapping.
 Document symbols are unavailable until their fetch completes. Any other free
@@ -23,7 +24,7 @@ from yaml_api_generator.parsers.yaml_parser import ConfigError
 from yaml_api_generator.ir import IRSymbolRef
 from yaml_api_generator.parsers.where_parser import WhereBinding, parse_where_binding
 
-from .auth_validation import _resolved_fields
+from .entity_inheritance import inherited_fields
 from .symbol_resolution import SymbolScope
 from .v02.binding_classifier import BindingKind, binding_kind
 
@@ -82,17 +83,12 @@ def _validate_service_with(spec: dict[str, Any]) -> list[ConfigError]:
             symbols = {rhs.root} if isinstance(rhs, IRSymbolRef) else set()
             errors.extend(scope.undefined(symbols, path))
         repository = repositories.get(service.get("repository"))
-        operation = service.get("operation")
-        operation_config = (
-            (repository.get("operations") or {}).get(operation)
-            if isinstance(repository, dict) and operation is not None
-            else None
-        )
-        if not isinstance(operation_config, dict) or not isinstance(
-            operation_config.get("query"), dict
-        ):
+        if service.get("handler") or not isinstance(repository, dict):
             continue
-        referenced = _free_symbols(operation_config["query"])
+        operation = service.get("operation")
+        operation_config = (repository.get("operations") or {}).get(operation)
+        query = operation_config.get("query") if isinstance(operation_config, dict) else None
+        referenced = _free_symbols(query) if isinstance(query, dict) else set()
         errors.extend(
             ConfigError(
                 code="SERVICE_WITH_TARGET_UNKNOWN",
@@ -153,7 +149,7 @@ def _validate_repository_filters(spec: dict[str, Any]) -> list[ConfigError]:
     sites = _repository_filter_sites(spec)
     errors: list[ConfigError] = []
     for repo_name, repo in (spec.get("repositories") or {}).items():
-        if not isinstance(repo, dict):
+        if not isinstance(repo, dict) or repo.get("abstract"):
             continue
         for op_name, op in (repo.get("operations") or {}).items():
             if not isinstance(op, dict) or not isinstance(op.get("query"), dict):
@@ -408,7 +404,7 @@ def _unknown_fields(
 def _fields_by_collection(spec: dict[str, Any]) -> dict[str, frozenset[str]]:
     entities = spec.get("entities") or {}
     return {
-        name: frozenset(_resolved_fields(repo["entity"], entities))
+        name: frozenset(inherited_fields(repo["entity"], entities))
         for name, repo in (spec.get("repositories") or {}).items()
         if isinstance(repo, dict) and isinstance(entities.get(repo.get("entity")), dict)
     }

@@ -46,16 +46,37 @@ Common codes:
   and tabs (use spaces).
 - `YAML_ROOT_INVALID` -- the document parsed but the top level is not a mapping.
 - `SCHEMA_VALIDATION_ERROR` -- valid YAML, but the structure does not match the schema.
-  Fix the field name or type at the `path` shown.
+  Fix the field name or type at the `path` shown. This includes an unknown key (see the
+  [grammar reference](./Reference/grammar.md)) and a `crud` value outside `list`, `get`,
+  `create`, `update`, `replace`, `delete`.
 - `ID_FIELD_MISSING` / `ID_FIELD_MULTIPLE` -- an entity must declare exactly one
   `type: id` field (or a natural `pk:`). Zero or two `id` fields are rejected.
-- `CRUD_OPERATION_INVALID` -- a `repositories.<name>.crud` list contains a value that is
-  not one of `list`, `get`, `create`, `update`, `replace`, `delete`.
-- `OPERATION_MISSING_QUERY_OR_HANDLER` -- a custom `repositories.<name>.operations.<op>`
-  declares neither a `query:` nor a `handler:`.
-- `QUERY_COMMAND_UNKNOWN` / `QUERY_MISSING_COLLECTION` -- a query op uses an unknown
-  command or targets no collection (the repository has no entity and no
-  `query.collection`).
+- `SCHEMA_VALIDATION_ERROR` "an operation declares exactly one of 'query' or 'handler'"
+  -- a custom `repositories.<name>.operations.<op>` declares neither or both.
+- `QUERY_COMMAND_UNKNOWN` / `QUERY_MISSING_FIELD` / `QUERY_MISSING_COLLECTION` /
+  `QUERY_COLLECTION_NOT_FOUND` -- a query op uses an unknown command, lacks a field its
+  command needs, targets no collection (the repository has no entity and no
+  `query.collection`), or names a `query.collection` that is not a declared repository.
+- `QUERY_FORM_MISMATCH` / `QUERY_SQL_INVALID` -- a `sql` query on a MongoDB repository or
+  a `command` query on a PostgreSQL one, or an empty `sql`.
+- `LIFECYCLE_FIELD_NOT_FOUND` / `LIFECYCLE_FIELD_NOT_DATETIME` -- `softDelete` or
+  `ttl.field` names a field the entity lacks or one that is not `type: datetime`. See
+  [Lifecycle](./Reference/repositories/lifecycle.md).
+- `REPOSITORY_EXTENDS_NOT_FOUND` / `REPOSITORY_EXTENDS_NOT_ABSTRACT` /
+  `REPOSITORY_CIRCULAR_EXTENDS` and the `SERVICE_` equivalents -- `extends` names an
+  undeclared entry or one without `abstract: true`, or the chain loops back on itself.
+- `DESUGAR_ABSTRACT_REPOSITORY_BOUND` / `DESUGAR_ABSTRACT_SERVICE_BOUND` -- a service or
+  controller binds an abstract repository or service; bind a concrete one that extends it.
+- `DESUGAR_SERVICE_NOT_FOUND` -- a controller or route references an undefined service.
+- `REPOSITORY_OPERATION_UNDECLARED` -- a route calls an operation that no handler
+  implements and the repository does not provide. Declare it under the repository's
+  `operations`, list it in `crud`, or give the service a handler.
+- `PAGINATION_UNSUPPORTED` -- `pagination` on a route whose operation is not a repository
+  `list`.
+- `SESSION_ALGORITHM_UNUSED` -- `session.algorithm: RS256` on a spec that never mints a
+  session token. See [`session:`](./Reference/configuration/session.md).
+- `BACKEND_FEATURE_UNSUPPORTED` -- the chosen backend lacks a feature the spec uses, such
+  as `session.refresh` or `delivery: cookie` on DRF or raw ASGI.
 - `ACCESS_AMBIGUOUS_ROLE` / `ACCESS_NO_AUTH_ENTITY` / `ACCESS_UNKNOWN_ENTITY` -- an access
   rule names a role that matches more than one identity entity, references roles when no
   `type: auth` entity exists, or names an entity that does not exist.
@@ -86,9 +107,9 @@ Common codes:
   `principal.sub equals document.ownerId`, or `document.status equals 'published'`).
   Bare `true`/`false` literals are not accepted; compare against a quoted string instead.
 - A stored field on the authenticated record is read via `principal.record.<field>`
-  (bare `principal` is the subject id from the token).
-- Keywords are case-insensitive, but there is no parenthesis grouping; combine clauses
-  with `and`/`or`.
+  (`principal.sub` is the subject id from the token).
+- Keywords are case-insensitive, and parentheses group clauses
+  joined with `and`/`or`.
 
 ## MongoDB connection refused
 
@@ -220,16 +241,13 @@ You are authenticated but an access rule denied the request -- the wrong role, a
 `<entity>:*` scope you are not in, or an ownership/`when` rule that did not match.
 Check the access rules on the controller for that operation.
 
-> **Enforcement status**
+> **Enforcement**
 >
-> Roles (exact match), `<entity>:*` scoping, and ownership/ABAC `when` rules
+> Roles, role hierarchies, `<entity>:*` scoping, and ownership/ABAC `when` rules
 > are enforced by the generated FastAPI backend, the generated DRF backend, and the
-> `stackform run` dev server alike. A request that fails a rule gets 401 (missing or
-> invalid credentials), 403 (authenticated but not allowed), or 404 (record not
-> found, checked before ownership). Two current limitations: role hierarchy (for
-> example `admin` inheriting `moderator`) is accepted in YAML but not yet applied
-> during enforcement -- only exact role matches are checked; and conditional or
-> ownership rules require a v0.2 spec, because v0.1 specs do not parse `when` rules.
+> `stackform run` dev server alike. A request that no rule admits gets 401 when it
+> carries no valid credentials and 403 otherwise; a missing record answers 404
+> before ownership is checked.
 
 ## JWT_SECRET warning
 
@@ -257,7 +275,7 @@ block in the spec, and exit 1 with one of:
 
 ## SSO and external auth
 
-External providers are attached through `auth.bindings` and need a reachable provider.
+External providers are attached through a binding object in `auth.via` and need a reachable provider.
 Common callback failures (status from `GET /api/v1/{collection}/auth/{provider}/callback`):
 
 - `401 {"detail": "Token exchange failed"}` -- the authorization code could not be

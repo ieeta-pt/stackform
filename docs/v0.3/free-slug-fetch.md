@@ -1,18 +1,13 @@
 ---
 title: Freely-named single-record tokens
-description: Fetch a built-in single-record op by a route-derived token predicate instead of the hardwired `{id}`.
+description: Locate the record of a built-in single-record operation from freely named route tokens.
 ---
 
-## The `{id}` assumption, lifted
+## Naming the record token
 
 The built-in single-record operations &mdash; `get`, `update`, `replace`,
-`delete` &mdash; used to hardwire the path token `{id}` and load the record by a
-route parameter literally named `id`. Renaming the token silently broke the
-fetch: the record never loaded and any ownership / `when:` check evaluated
-against nothing.
-
-Under v0.3 a single-record op derives its fetch from the **route template**
-instead. A route may name its token freely:
+`delete` &mdash; locate their record from the **route template**, so a route
+may name its token freely:
 
 ```yaml
 controllers:
@@ -100,10 +95,8 @@ Each method returns the affected document, or `None` when the complete predicate
 does not match. The built-in MongoDB and SQL adapters and all generated
 repositories implement this contract.
 
-## v0.2 compatibility
+## In v0.2
 
-v0.2 built-in single-record ops always use the `{id}` convention. Runtime and
-generated backends continue to load directly by `id`, and a missing runtime
-parameter yields the exact legacy message `Missing route parameter: id`.
-Freely-named and nested record predicates are enabled only when the spec version
-is `0.3`.
+v0.2 built-in single-record operations use the `{id}` path parameter and load
+the record by `id`; a missing parameter answers `Missing route parameter: id`.
+Freely-named and nested record predicates are v0.3 only.

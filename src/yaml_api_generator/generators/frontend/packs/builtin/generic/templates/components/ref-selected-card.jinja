@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../__generated__/App';
-import { API_BASE_URL } from '../__generated__/config';
+import { callOperation } from '../__generated__/records';
 
 interface RefRecord {
   id: string;
@@ -10,19 +10,19 @@ interface RefRecord {
 }
 
 interface RefSelectedCardProps {
-  target: string;
-  targetEndpoint: string;
+  target?: string;
   value?: string | null;
   onChange?: (id: string | null) => void;
   onSwap?: () => void;
+  onClear?: () => void;
 }
 
 export function RefSelectedCard({
-  target,
-  targetEndpoint,
-  value,
+  target = {{ props.target.value | tojson }},
+  value{% if props.value %} = {{ props.value.value | tojson }}{% endif %},
   onChange,
   onSwap,
+  onClear,
 }: RefSelectedCardProps) {
   const [record, setRecord] = useState<RefRecord | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,12 +35,12 @@ export function RefSelectedCard({
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch(`${API_BASE_URL}${targetEndpoint}/${value}`, { headers })
+    callOperation(target, 'get', { id: value, headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setRecord(data))
       .catch(() => setRecord(null))
       .finally(() => setLoading(false));
-  }, [value, token, targetEndpoint]);
+  }, [value, token, target]);
 
   if (!value) {
     return (
@@ -101,7 +101,7 @@ export function RefSelectedCard({
           </button>
           <button
             type="button"
-            onClick={() => onChange?.(null)}
+            onClick={() => { onChange?.(null); onClear?.(); }}
             className="wf-btn wf-btn-sm text-wf-ink-dim"
             title="Clear selection"
           >
@@ -117,3 +117,5 @@ export function RefSelectedCard({
     </div>
   );
 }
+
+export default RefSelectedCard;

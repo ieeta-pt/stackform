@@ -86,7 +86,7 @@ Each family picks its own default, with the same rules:
 - Two `default: true` entries in the same family is an error.
 - Several entries and no default is an error only when something needs the default.
 
-Adding a file datastore never changes which record datastore is the default.
+Adding a file datastore never changes which record datastore is the default. The `mongo:` shortcut counts as the record datastore, so it combines with file datastores but not with a `mongodb` or `postgres` entry.
 
 ## Binding a repository
 

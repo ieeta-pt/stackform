@@ -55,6 +55,8 @@ The service key must match a repository key of the same name for this shorthand 
 - `repositories.<name>.crud: [...]` selects the subset that repository exposes.
 - `services.<name>.operations.<op>` is the final override (a boolean, or a `{ handler }` map).
 
+A boolean switch names a CRUD operation (or, on an auth entity, an auth operation) or a custom operation the repository declares; any other name, such as a misspelled `lsit: false`, fails with `DESUGAR_SERVICE_OPERATION_UNKNOWN`. To add a new operation, give it a `{ handler }` map instead.
+
 Resolution precedence, highest first: service `operations` > repository `crud` > `api.operations.defaults` > all enabled. See [Composable per-operation CRUD](../repositories/composable-crud.md) and [Repository operations](../repositories/operations.md).
 
 ## Per-operation overrides
@@ -83,7 +85,7 @@ The controller route is required for custom (non-CRUD) operations; without `meth
 
 ```yaml
 imports:
-  handlers: my-app.handlers
+  handlers: my_app.handlers
 
 services:
   myCollection:
@@ -96,30 +98,27 @@ controllers:
     service: myCollection
     base_path: /my-collection
     operations:
-      publish: { method: POST, path: /{id}/publish }
+      publish: { method: POST, path: "/{id}/publish" }
 ```
 
 With `api: { basePath: /api, version: v1 }` this exposes `POST /api/v1/my-collection/{id}/publish`.
 
 ### Handler contract
 
-The handler is a Python function referenced by `importKey.functionName`. Generated
-backends pass their request object (the raw-ASGI target supplies a compatible
-request facade):
+The handler is a Python function referenced by `importKey.functionName`. Every
+backend and `stackform run` call it with the same request object and send its
+return value as the response body:
 
 ```python
 async def publish(request):
-    entity_id = request.path_params["id"]
-    body = await request.json()
-    ...
-    return {"id": entity_id, "published": True}
+    return {"id": request.params["id"], "published": True, "note": request.body.get("note")}
 ```
 
-The handler does its own data access and owns its response; an uncaught exception becomes a 500. The `stackform run` dev server uses a different handler shape (a request-context pipeline step). Both contracts are documented in [Custom operations](custom-operations.md) and [Handler context](handler-context.md).
+The handler does its own data access. Raising `ValueError` answers 422; any other exception answers 500. Every request attribute is listed in [Handler context](handler-context.md).
 
 ## Top-level `handler` vs per-operation `handler`
 
-- A top-level `handler` on a service replaces the whole service group with one custom function (no CRUD units are generated for it).
+- A top-level `handler` on a service replaces the whole service group with one custom function (no CRUD units are generated for it). It cannot be combined with `operation`.
 - `operations.<op>.handler` adds a single custom operation alongside the repository-backed CRUD operations.
 
 ```yaml
@@ -132,13 +131,42 @@ services:
       publish: { handler: handlers.publish }  # one extra operation
 ```
 
+## Inheritance with `abstract` and `extends`
+
+An `abstract: true` service is a template: no controller may reference it. A service with `extends: <name>` inherits every key of that abstract service except `abstract` and `extends`; its own keys win and `operations` merge per operation. An abstract service may itself extend another abstract service: a service inherits from every level of the chain, and the nearest declaration of an operation wins, so an extending service replaces an inherited handler by declaring the operation again.
+
+```yaml
+services:
+  publishable:
+    abstract: true
+    operations:
+      publish: { handler: handlers.publish }
+  articles:
+    repository: articles
+    extends: publishable
+  pages:
+    repository: pages
+    extends: publishable
+    operations:
+      delete: false
+```
+
+When the abstract service declares `operations`, the generated backend emits it as a base class that every extending service subclasses.
+
+| Code | Cause |
+|------|-------|
+| `SERVICE_EXTENDS_NOT_FOUND` | `extends` names a service that does not exist. |
+| `SERVICE_EXTENDS_NOT_ABSTRACT` | `extends` names a service without `abstract: true`. |
+| `SERVICE_CIRCULAR_EXTENDS` | An `extends` chain loops back on itself. |
+| `DESUGAR_ABSTRACT_SERVICE_BOUND` | A controller references an abstract service. |
+
 ## Imports
 
 `handler:` values are dotted references of the form `importKey.functionName`. The leading key is looked up in the top-level `imports:` map and the rest is appended; if the key is not declared, the value is treated as a verbatim dotted module path.
 
 ```yaml
 imports:
-  handlers: my-app.handlers            # handlers.publish -> my-app.handlers.publish
+  handlers: my_app.handlers            # handlers.publish -> my_app.handlers.publish
 ```
 
 Declaring the alias in `imports:` keeps handler references short and is recommended, but is not strictly required.
@@ -183,7 +211,7 @@ api:
       login: true
 
 imports:
-  handlers: my-app.handlers
+  handlers: my_app.handlers
 
 services:
   users: {}                              # all CRUD + register/login (auth entity)

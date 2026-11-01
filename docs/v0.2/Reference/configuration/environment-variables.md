@@ -29,8 +29,7 @@ not overlap:
 > `settings.<PROVIDER>_CLIENT_SECRET.get_secret_value()`. The literal secret must
 > never live in the spec: write only a placeholder there (or omit the field) and
 > provide the real value through the runtime environment. The same applies to
-> `JWT_SECRET`. Earlier prerelease builds baked `client_secret` into the output as a
-> literal; that no longer happens.
+> `JWT_SECRET`.
 
 ## Spec Interpolation
 
@@ -120,7 +119,11 @@ not via spec interpolation. They are grouped by who reads them.
 | `MONGO_DB` | `yaml_api` | MongoDB database name. |
 | `JWT_SECRET` | *(generated)* | HMAC key for JWT signing (HS256), a `SecretStr` setting. The generated backend bundle ships a `.env` with a real value (`secrets.token_urlsafe`), so a fresh bundle runs without manual setup; override it for production. |
 | `<PROVIDER>_CLIENT_SECRET` | *(none)* | OAuth2 client secret for each confidential OIDC provider (e.g. `KEYCLOAK_CLIENT_SECRET` for a provider named `keycloak`), a `SecretStr` setting read at run time via `settings.<PROVIDER>_CLIENT_SECRET.get_secret_value()`. Emitted only when the provider declares a `client_secret`. |
-| `JWT_EXPIRATION_HOURS` | `24` | JWT token lifetime in hours. |
+| `JWT_EXPIRATION_HOURS` | `24` | JWT token lifetime in hours, when [`session.ttl`](./session.md#ttl) is unset and refresh is off. |
+| `JWT_ACCESS_TTL_SECONDS` | `session.ttl` (or `900` with refresh) | Access-token lifetime in seconds; present when `session.ttl` is set or `session.refresh` is on. |
+| `JWT_REFRESH_TTL_SECONDS` | `2592000` | Refresh-token lifetime in seconds; present when `session.refresh` is on. |
+| `JWT_PRIVATE_KEY` | *(generated)* | PEM RSA private key that replaces `JWT_SECRET` when `session.algorithm` is `RS256`. |
+| `JWT_RETIRED_PUBLIC_KEY` | `""` | PEM RSA public key of a previous signing key whose tokens stay valid during rotation (`RS256`). |
 | `PASSWORD_HASH_ROUNDS` | `390000` | PBKDF2-HMAC-SHA256 iteration count for password hashing. |
 | `FRONTEND_URL` | `""` | Base URL the OIDC callback redirects to (`{FRONTEND_URL}/auth/callback?code=...`). Falls back to the request base URL when unset. |
 | `HOST` | `127.0.0.1` | Host the generated `app.py` binds to when run directly. |
@@ -191,7 +194,7 @@ template task then renders the remote `/opt/<name>/.env` (mode `0600`) from thos
 values, and `docker compose` reads it via `env_file`. The `.secrets/` directory and
 the remote `.env` are the only places the plaintext secret ever exists.
 
-This currently covers the framework secrets the generated code reads (`JWT_SECRET`
+This covers the framework secrets the generated code reads (`JWT_SECRET`
 and each confidential provider's `<PROVIDER>_CLIENT_SECRET`). Any additional runtime
 variables your backend needs are declared explicitly in the spec's `deploy.env_vars`
 list and emitted with an empty default for you to fill.

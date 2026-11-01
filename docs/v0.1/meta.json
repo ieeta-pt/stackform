@@ -3,6 +3,6 @@
   "root": true,
   "pages": [
     "specification",
-    "structure"
+    "grammar-reference"
   ]
 }

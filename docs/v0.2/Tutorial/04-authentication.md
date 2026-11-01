@@ -102,7 +102,7 @@ A JWT (JSON Web Token) is a signed string that encodes the user's identity. The 
 
 ## Routes are protected by default
 
-As soon as any `type: auth` entity exists in the spec, every route that is not explicitly `access: public` requires a valid principal (a resolved, authenticated user). A request without valid credentials to a protected route gets `401 Unauthorized`. This is why the controllers above set `access: public` on the routes that should stay open (including `register` and `login`).
+Every route that is not explicitly `access: public` requires a valid principal (a resolved, authenticated user). A request without valid credentials to a protected route gets `401 Unauthorized`. This is why the controllers above set `access: public` on the routes that should stay open (including `register` and `login`).
 
 A minified controller (one declared with a bare `service:` and no `access:`) defaults to `access: public`. To protect a resource you must opt in with `access: "*"` (or a more specific rule). Locking down routes is the subject of [Tutorial 05: Access Control](./05-access-control.md).
 
@@ -131,7 +131,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/users/login \
   -d '{"email": "alice@example.com", "password": "s3cr3t"}'
 ```
 
-A successful login returns the token plus the user record, with `password`, `_id`, and the `_auth` namespace stripped:
+A successful login returns the token, the user record with `password`, `apiKey`, `_id`, and the `_auth` namespace stripped, and the roles the record holds:
 
 ```json
 {
@@ -140,7 +140,8 @@ A successful login returns the token plus the user record, with `password`, `_id
     "id": "0192...",
     "email": "alice@example.com",
     "displayName": "Alice"
-  }
+  },
+  "roles": []
 }
 ```
 
@@ -182,6 +183,6 @@ The generated backend reads these at runtime:
 - Register and login routes are off by default; enable them with `api.operations.auth: { register: true, login: true }`.
 - Passwords are hashed with PBKDF2-SHA256 and stored at `_auth.passwordHash`. The raw password is never stored, and `_auth` is stripped from responses.
 - The `password` field on register is implicit -- declaring `password` or `passwordHash` in `fields:` is a build error.
-- Login returns `{"token": "...", "user": {...}}`; the JWT carries identity only (`sub`, `identity_collection`), and roles are read from the user record per request.
+- Login returns `{"token": "...", "user": {...}, "roles": [...]}`; the JWT carries identity only (`sub`, `identity_collection`), and roles are read from the user record per request.
 - A client can authenticate with a Bearer JWT, an API key, or HTTP Basic credentials.
 - Once an auth entity exists, every non-public route requires a valid principal (401 otherwise).

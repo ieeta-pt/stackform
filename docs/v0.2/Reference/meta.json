@@ -1,6 +1,7 @@
 {
   "title": "Reference",
   "pages": [
+    "grammar",
     "configuration",
     "entities",
     "dto",
@@ -11,6 +12,7 @@
     "controllers",
     "ui",
     "providers",
+    "policies",
     "when-expressions",
     "cli"
   ]

@@ -1,7 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+{% from 'macros/access.jinja' import allowed %}
+{% from 'macros/field_input.jinja' import field_control, control_imports %}
+{% set editable_fields = entity.fields.values() | rejectattr('name', 'equalto', entity.pk_field) | list %}
+{% set inline_edit = props.inline_edit.value %}
+{% macro cell_value(field) %}
+<div className="px-3 py-1.5 text-wf-ink">
+  {% if field.type == 'enum' %}
+  <span className="wf-badge">{displayValue(item.{{ field.name }})}</span>
+  {% elif field.name in ['id', 'pk', 'createdAt', 'updatedAt'] %}
+  <span className="wf-mono">{String(item.{{ field.name }} || '')}</span>
+  {% else %}
+  {String(item.{{ field.name }} ?? '')}
+  {% endif %}
+</div>
+{% endmacro %}
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../__generated__/App';
-import { API_BASE_URL } from '../__generated__/config';
+import { Allowed, useAuth } from '../__generated__/App';
+import { {% if inline_edit %}callOperation, {% endif %}displayValue, listRecords } from '../__generated__/records';
+{% if inline_edit %}
+import { ENTITY_FIELDS, FormValues, inputValue, payload } from '../__generated__/fields';
+{{ control_imports(editable_fields) }}
+{% endif %}
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -9,20 +28,23 @@ interface {{ entity.name | pascal_case }} {
   {{ field.name }}: {% if field.type == 'string' %}string{% elif field.type == 'number' %}number{% elif field.type == 'boolean' %}boolean{% else %}any{% endif %};
   {% endfor %}
 }
+{% if inline_edit %}
 
 type ActiveCell = { id: string; field: string };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-{% set editable_fields = entity.fields.values() | rejectattr('name', 'equalto', entity.pk_field) | list %}
+const FIELDS = ENTITY_FIELDS[{{ entity.name | tojson }}];
+{% endif %}
 
 export default function {{ view.name | pascal_case }}() {
   const [items, setItems] = useState<{{ entity.name | pascal_case }}[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  {% if inline_edit %}
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [draft, setDraft] = useState<FormValues>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const inputRef = useRef<HTMLInputElement>(null);
+  {% endif %}
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -30,15 +52,9 @@ export default function {{ view.name | pascal_case }}() {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch(`${API_BASE_URL}/{{ entity.repository_name | kebab_case }}`, { headers })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(res.status === 401 ? 'Authentication required' : `Error: ${res.status}`);
-        }
-        return res.json();
-      })
+    listRecords('{{ entity.name }}', headers)
       .then(data => {
-        setItems(Array.isArray(data) ? data : []);
+        setItems(data);
         setLoading(false);
       })
       .catch(err => {
@@ -47,15 +63,14 @@ export default function {{ view.name | pascal_case }}() {
       });
   }, [token]);
 
-  useEffect(() => {
-    if (activeCell) inputRef.current?.focus();
-  }, [activeCell]);
-
+  {% if inline_edit %}
   const activateCell = (id: string, field: string, currentValue: unknown) => {
     setActiveCell({ id, field });
-    setEditValue(String(currentValue ?? ''));
+    setDraft({ [field]: inputValue(FIELDS[field], currentValue) });
     setSaveState('idle');
   };
+
+  const setCell = (name: string, value: unknown) => setDraft({ [name]: value });
 
   const commitCell = async () => {
     if (!activeCell) return;
@@ -65,10 +80,11 @@ export default function {{ view.name | pascal_case }}() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/{{ entity.repository_name | kebab_case }}/${activeCell.id}`,
-        { method: 'PUT', headers, body: JSON.stringify({ [activeCell.field]: editValue }) }
-      );
+      const res = await callOperation('{{ entity.name }}', 'update', {
+        id: activeCell.id,
+        headers,
+        body: JSON.stringify(payload({ [activeCell.field]: FIELDS[activeCell.field] }, draft, {})),
+      });
       if (!res.ok) throw new Error('Save failed');
       const updated = await res.json();
       setItems(prev => prev.map(item => item.{{ entity.pk_field }} === activeCell.id ? updated : item));
@@ -79,10 +95,11 @@ export default function {{ view.name | pascal_case }}() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); commitCell(); }
     if (e.key === 'Escape') { setActiveCell(null); setSaveState('idle'); }
   };
+  {% endif %}
 
   if (loading) {
     return (
@@ -112,20 +129,24 @@ export default function {{ view.name | pascal_case }}() {
           </div>
           <h3 className="font-title text-xl text-wf-ink mb-2">No {{ entity.name | lower }}s yet</h3>
           <p className="text-wf-ink-dim text-sm mb-4">Create your first record to get started.</p>
+          {% call allowed(entity, 'create') %}
           <button onClick={() => navigate('{{ view.path }}/new')} className="wf-btn wf-btn-primary">
             + New {{ entity.name | title }}
           </button>
+          {% endcall %}
         </div>
       </div>
     );
   }
 
+  {% if inline_edit %}
   const saveBadge = {
     saving: <span className="wf-mono text-xs text-wf-ink-dim">Saving…</span>,
     saved:  <span className="wf-mono text-xs text-wf-success">Saved</span>,
     error:  <span className="wf-mono text-xs text-wf-danger">Error saving</span>,
     idle:   null,
   }[saveState];
+  {% endif %}
 
   return (
     <div className="h-full flex flex-col">
@@ -133,22 +154,28 @@ export default function {{ view.name | pascal_case }}() {
       <div className="wf-toolbar px-6 pt-4">
         <h1 className="font-title text-2xl text-wf-ink">{{ entity.name | title }}</h1>
         <span className="wf-mono text-wf-ink-dim">{items.length} rows</span>
+        {% if inline_edit %}
         {saveBadge}
+        {% endif %}
         <div className="flex-1" />
+        {% if inline_edit %}
         {activeCell && (
           <button className="wf-btn wf-btn-primary wf-btn-sm" onClick={commitCell}>
             Save
           </button>
         )}
+        {% endif %}
+        {% call allowed(entity, 'create') %}
         <button
           onClick={() => navigate('{{ view.path }}/new')}
           className="wf-btn wf-btn-primary"
         >
           + New
         </button>
+        {% endcall %}
       </div>
 
-      {/* Hint */}
+      {% if inline_edit %}
       {activeCell && (
         <div className="px-6 py-1.5 border-b border-wf-line bg-wf-accent-soft">
           <span className="wf-mono text-xs text-wf-accent-ink">
@@ -157,6 +184,7 @@ export default function {{ view.name | pascal_case }}() {
           </span>
         </div>
       )}
+      {% endif %}
 
       {/* Spreadsheet */}
       <div className="flex-1 overflow-auto px-6 pb-6">
@@ -181,9 +209,13 @@ export default function {{ view.name | pascal_case }}() {
               {items.map((item, rowIndex) => (
                 <tr
                   key={item.{{ entity.pk_field }}}
+                  {% if inline_edit %}
                   className={`border-b border-wf-line ${
                     activeCell?.id === item.{{ entity.pk_field }} ? 'bg-wf-accent-soft/30' : 'hover:bg-wf-fill'
                   }`}
+                  {% else %}
+                  className="border-b border-wf-line hover:bg-wf-fill"
+                  {% endif %}
                 >
                   {/* Row number */}
                   <td className="px-3 py-1.5 text-center wf-mono text-xs text-wf-ink-faint bg-wf-fill border-r border-wf-line select-none">
@@ -191,6 +223,7 @@ export default function {{ view.name | pascal_case }}() {
                   </td>
 
                   {% for field in editable_fields %}
+                  {% if inline_edit and not field.readonly %}
                   <td
                     className={`border-r border-wf-line p-0 ${
                       activeCell?.id === item.{{ entity.pk_field }} && activeCell?.field === '{{ field.name }}'
@@ -202,27 +235,18 @@ export default function {{ view.name | pascal_case }}() {
                     }}
                   >
                     {activeCell?.id === item.{{ entity.pk_field }} && activeCell?.field === '{{ field.name }}' ? (
-                      <input
-                        ref={inputRef}
-                        type="{% if field.type == 'number' %}number{% else %}text{% endif %}"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onBlur={commitCell}
-                        className="w-full px-3 py-1.5 bg-transparent border-none outline-none text-wf-ink text-sm"
-                      />
-                    ) : (
-                      <div className="px-3 py-1.5 text-wf-ink">
-                        {% if field.type == 'enum' %}
-                        <span className="wf-badge">{String(item.{{ field.name }} || '—')}</span>
-                        {% elif field.name in ['id', 'pk', 'createdAt', 'updatedAt'] %}
-                        <span className="wf-mono">{String(item.{{ field.name }} || '')}</span>
-                        {% else %}
-                        {String(item.{{ field.name }} ?? '')}
-                        {% endif %}
+                      <div className="px-3 py-1.5">
+                        {{ field_control(field, 'draft', 'setCell', 'cell-' ~ field.name, 'autoFocus onKeyDown={handleKeyDown} onBlur={commitCell}') }}
                       </div>
+                    ) : (
+                      {{ cell_value(field) }}
                     )}
                   </td>
+                  {% else %}
+                  <td className="border-r border-wf-line p-0">
+                    {{ cell_value(field) }}
+                  </td>
+                  {% endif %}
                   {% endfor %}
 
                   {/* Row actions */}

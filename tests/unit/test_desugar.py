@@ -25,6 +25,7 @@ def _parse(yaml_str: str, tmp_path) -> object:
 
 def _base_config() -> dict:
     return {
+        "version": "0.2",
         "api": {
             "basePath": "/api",
             "version": "v1",
@@ -167,6 +168,10 @@ def test_type_inherited_from_parent(tmp_path):
         api:
           basePath: /api
           version: v1
+          operations:
+            auth:
+              register: true
+              login: true
         mongo:
           uri: mongodb://localhost:27017
           database: testdb
@@ -521,6 +526,10 @@ def test_access_override_per_operation_applied(tmp_path):
         api:
           basePath: /api
           version: v1
+          operations:
+            auth:
+              register: true
+              login: true
         mongo:
           uri: mongodb://localhost:27017
           database: testdb

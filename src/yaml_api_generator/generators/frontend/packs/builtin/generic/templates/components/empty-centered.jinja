@@ -7,9 +7,9 @@ interface EmptyCenteredProps {
 }
 
 export function EmptyCentered({
-  title = 'No {{ entity.name | lower | plural }} yet',
-  subtitle = 'Create your first record to get started.',
-  actionLabel = '+ New {{ entity.name | title }}',
+  title = {{ (props.title.value if props.title else 'No ' ~ entity.repository_name ~ ' yet') | tojson }},
+  subtitle = {{ props.message.value | tojson }},
+  actionLabel = {{ (props.action_label.value if props.action_label else '+ New ' ~ entity.name | title) | tojson }},
   onAction,
   icon = '∅',
 }: EmptyCenteredProps) {
@@ -30,3 +30,5 @@ export function EmptyCentered({
     </div>
   );
 }
+
+export default EmptyCentered;

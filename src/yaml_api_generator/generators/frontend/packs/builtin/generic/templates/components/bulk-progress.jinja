@@ -1,7 +1,8 @@
+{% from 'macros/access.jinja' import allowed %}
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../__generated__/App';
-import { API_BASE_URL } from '../__generated__/config';
+import { Allowed, useAuth } from '../__generated__/App';
+import { callOperation, displayValue, listRecords } from '../__generated__/records';
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
@@ -23,8 +24,10 @@ interface {{ entity.name | pascal_case }} {
 type OperationState =
   | { status: 'idle' }
   | { status: 'running'; label: string; total: number; done: number; cancelled: boolean; cancel: () => void }
-  | { status: 'done'; label: string; total: number; undoable: boolean }
+  | { status: 'done'; label: string; total: number }
   | { status: 'cancelled'; label: string; done: number };
+
+const ACTION = {{ props.action.value | tojson }};
 
 export default function {{ view.name | pascal_case }}() {
   const [items, setItems] = useState<{{ entity.name | pascal_case }}[]>([]);
@@ -40,12 +43,8 @@ export default function {{ view.name | pascal_case }}() {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch(`${API_BASE_URL}/{{ entity.repository_name | kebab_case }}`, { headers })
-      .then(res => {
-        if (!res.ok) throw new Error(res.status === 401 ? 'Authentication required' : `Error: ${res.status}`);
-        return res.json();
-      })
-      .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false); })
+    listRecords('{{ entity.name }}', headers)
+      .then(data => { setItems(data); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [token]);
 
@@ -62,7 +61,7 @@ export default function {{ view.name | pascal_case }}() {
       : new Set(items.map(i => i.{{ entity.pk_field }}))
     );
 
-  const runBulkArchive = async () => {
+  const runBulk = async () => {
     const ids = [...selectedIds];
     const total = ids.length;
     abortRef.current = new AbortController();
@@ -71,7 +70,7 @@ export default function {{ view.name | pascal_case }}() {
     let done = 0;
     setOperation({
       status: 'running',
-      label: 'Archiving',
+      label: ACTION,
       total,
       done: 0,
       cancelled: false,
@@ -84,12 +83,8 @@ export default function {{ view.name | pascal_case }}() {
     for (const id of ids) {
       if (signal.aborted) break;
       try {
-        await fetch(`${API_BASE_URL}/{{ entity.repository_name | kebab_case }}/${id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ status: 'archived' }),
-          signal,
-        });
+        const res = await callOperation('{{ entity.name }}', 'delete', { id, headers, signal });
+        if (!res.ok) break;
       } catch (_) {
         // abort or network error — stop gracefully
         break;
@@ -100,10 +95,10 @@ export default function {{ view.name | pascal_case }}() {
       );
     }
 
-    if (signal.aborted) {
-      setOperation({ status: 'cancelled', label: 'Archive', done });
+    if (done < total) {
+      setOperation({ status: 'cancelled', label: ACTION, done });
     } else {
-      setOperation({ status: 'done', label: 'Archived', total, undoable: true });
+      setOperation({ status: 'done', label: ACTION, total });
       setItems(prev => prev.filter(i => !selectedIds.has(i.{{ entity.pk_field }})));
       setSelectedIds(new Set());
     }
@@ -138,16 +133,18 @@ export default function {{ view.name | pascal_case }}() {
         <span className="wf-mono">{items.length} records</span>
         <div className="flex-1" />
         {selectedIds.size > 0 && operation.status === 'idle' && (
-          <button onClick={runBulkArchive} className="wf-btn">
-            Archive {selectedIds.size} selected
+          <button onClick={runBulk} className="wf-btn">
+            {ACTION} {selectedIds.size} selected
           </button>
         )}
+        {% call allowed(entity, 'create') %}
         <button
           onClick={() => navigate('{{ view.path }}/new')}
           className="wf-btn wf-btn-primary"
         >
           + New
         </button>
+        {% endcall %}
       </div>
 
       {/* Progress / undo banner */}
@@ -156,13 +153,13 @@ export default function {{ view.name | pascal_case }}() {
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-wf-accent-ink">
               {operation.status === 'running' && (
-                <>Archiving {(operation as any).total} {{ entity_plural }}…</>
+                <>{ACTION}: {(operation as any).total} {{ entity_plural }}…</>
               )}
               {operation.status === 'done' && (
-                <>{(operation as any).label} {(operation as any).total} {{ entity_plural }}</>
+                <>{(operation as any).label}: {(operation as any).total} {{ entity_plural }} done</>
               )}
               {operation.status === 'cancelled' && (
-                <>Archive cancelled after {(operation as any).done} {{ entity_plural }}</>
+                <>{ACTION} stopped after {(operation as any).done} {{ entity_plural }}</>
               )}
             </span>
 
@@ -179,14 +176,6 @@ export default function {{ view.name | pascal_case }}() {
                   className="wf-btn wf-btn-sm"
                 >
                   Cancel
-                </button>
-              )}
-              {operation.status === 'done' && (operation as any).undoable && (
-                <button
-                  onClick={() => setOperation({ status: 'idle' })}
-                  className="wf-btn wf-btn-sm"
-                >
-                  Undo
                 </button>
               )}
               <button
@@ -255,9 +244,9 @@ export default function {{ view.name | pascal_case }}() {
                   {% for field in display_fields %}
                   <td>
                     {% if field.type == 'enum' %}
-                    <span className="wf-badge">{String(item.{{ field.name }} ?? '—')}</span>
+                    <span className="wf-badge">{displayValue(item.{{ field.name }})}</span>
                     {% else %}
-                    {String(item.{{ field.name }} ?? '—')}
+                    {displayValue(item.{{ field.name }})}
                     {% endif %}
                   </td>
                   {% endfor %}

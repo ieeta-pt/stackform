@@ -139,3 +139,15 @@ def test_sql_query_on_mongo_rejected(tmp_path):
     with pytest.raises(ConfigErrors) as exc:
         _parse(spec, tmp_path)
     assert any(e.code == "QUERY_FORM_MISMATCH" for e in exc.value.errors)
+
+
+def test_mongo_command_naming_a_postgres_collection_rejected(tmp_path):
+    spec = _MULTI.replace(
+        "posts: { entity: post }",
+        "posts: { entity: post, operations: { events: { query: { command: find, collection: events, filter: {} } } } }",
+    )
+    with pytest.raises(ConfigErrors) as exc:
+        _parse(spec, tmp_path)
+    assert [e.message for e in exc.value.errors if e.code == "QUERY_FORM_MISMATCH"] == [
+        "Operation 'events' uses a MongoDB command but datastore 'warehouse' is relational; use 'sql'"
+    ]

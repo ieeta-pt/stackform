@@ -75,7 +75,7 @@ file, and its `path` becomes both a React Router route and a sidebar nav item. A
   to entity field names so the pack components know what to render.
 
 The `crud` composite component is the common case for a managed resource. A single
-`crud` view emits three page files (list, form, detail) and up to four routes:
+`crud` view emits four page files (list, form, detail, delete) and up to four routes:
 
 ```yaml
 views:
@@ -98,7 +98,8 @@ The generated app only renders actions and routes for CRUD operations the backin
 repository actually exposes. If a repository's `crud:` set omits `update`, the
 detail page shows no Edit button and the `/:id/edit` route is not emitted; omitting
 `create` removes the New action and the `/new` route. This keeps the UI in step with
-the backend surface. See the [operation-gating reference](operation-gating.md) and
+the backend surface. Actions the signed-in caller's roles do not admit are hidden
+too. See [Operation and role gating](operation-gating.md) and
 [Composable per-operation CRUD](../repositories/composable-crud.md).
 
 ## Authentication

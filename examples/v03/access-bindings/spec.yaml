@@ -1,8 +1,9 @@
 version: "0.3"
 
 api:
-  name: v03-access-bindings
   basePath: /api
+  operations:
+    auth: { login: true }
 
 mongo:
   uri: mongodb://localhost:27017

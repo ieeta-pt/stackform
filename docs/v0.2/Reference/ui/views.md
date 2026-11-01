@@ -58,7 +58,7 @@ shell, and registers a route at the view's `path`.
 ## The `crud` composite
 
 `component: crud` is the high-level way to wire a full resource UI. One view
-generates three page files and four routes:
+generates four page files and four routes:
 
 ```yaml
 ui:
@@ -77,7 +77,8 @@ ui:
 Generated for the view above:
 
 - Page files: `MyCollection.tsx` (list), `MyCollectionForm.tsx` (create/edit),
-  `MyCollectionDetail.tsx` (single record).
+  `MyCollectionDetail.tsx` (single record), `MyCollectionDelete.tsx` (the Delete
+  button and its dialog, shown on the detail page).
 - Routes: `/my-collection` (list), `/my-collection/new` (create form),
   `/my-collection/:id` (detail), `/my-collection/:id/edit` (edit form).
 
@@ -90,7 +91,7 @@ The `:id`, `/new`, and `/:id/edit` routes are operation-gated: each one is emitt
 only if the collection's backing repository exposes the corresponding CRUD
 operation. With `crud: [list, get]` on the repository, the create form (`/new`),
 edit form (`/:id/edit`), and their New/Edit buttons are all omitted, and the page
-becomes read-only. See [Operation-gated UI actions](operation-gating.md) and
+becomes read-only. See [Operation and role gating](operation-gating.md) and
 [Composable per-operation CRUD](../repositories/composable-crud.md).
 
 ## `field_roles`
@@ -142,16 +143,13 @@ SSO login lands on `/auth/callback?code=...`, which the app shell redeems for a 
 at `/auth/exchange`. See
 [Login, SSO, and the token flow](../auth/login-and-sso.md).
 
-> **Enforcement status**
+> **Enforcement**
 >
-> Roles (exact match), `<entity>:*` scoping, and ownership/ABAC `when` rules
+> Roles, role hierarchies, `<entity>:*` scoping, and ownership/ABAC `when` rules
 > are enforced by the generated FastAPI backend, the generated DRF backend, and the
-> `stackform run` dev server alike. A request that fails a rule gets 401 (missing or
-> invalid credentials), 403 (authenticated but not allowed), or 404 (record not
-> found, checked before ownership). Two current limitations: role hierarchy (for
-> example `admin` inheriting `moderator`) is accepted in YAML but not yet applied
-> during enforcement -- only exact role matches are checked; and conditional or
-> ownership rules require a v0.2 spec, because v0.1 specs do not parse `when` rules.
+> `stackform run` dev server alike. A request that no rule admits gets 401 when it
+> carries no valid credentials and 403 otherwise; a missing record answers 404
+> before ownership is checked.
 
 The UI gates which controls it shows, but it is not a security boundary: the
 generated backend enforces access on every request regardless of what the UI
@@ -179,4 +177,4 @@ A view's `component` may name a `generic` pack component directly, or a custom
 component declared in `ui.components`. A custom component resolves through its
 render tree down to the root pack component, which determines the page layout. The
 generic pack renders only that root pack component; nested render-tree props are
-validated but inert today. See [UI Components](components.md).
+validated but not rendered. See [UI Components](components.md).

@@ -8,6 +8,8 @@ generated app. The whole block is optional; when omitted, the defaults below app
 
 This is the single-datastore shortcut: a spec with `mongo:` behaves as one default MongoDB datastore. To use more than one database, or a relational database, use [`datastores:`](./datastores.md) instead.
 
+A spec cannot declare both `mongo:` and a record datastore (`mongodb` or `postgres`) under `datastores:`: validation rejects it with "mongo and a record datastore are mutually exclusive: declare MongoDB under datastores instead". File datastores (`filesystem`, `s3`) can sit next to `mongo:`.
+
 ## Schema
 
 ```yaml

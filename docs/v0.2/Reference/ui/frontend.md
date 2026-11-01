@@ -115,11 +115,12 @@ environment variable.
 The `generic` pack scaffolds a complete app shell around your views:
 
 - A sidebar layout with navigation and an always-present Dashboard.
-- A login gate and `useAuth()` hook when `require_auth` is true, including SSO
-  buttons for any external providers bound to an identity entity.
+- A login page and `useAuth()` hook when an auth entity exists, a login gate on
+  every route when `require_auth` is true, and SSO buttons for any external
+  providers bound to an identity entity.
 - Per-entity data hooks and a typed API client under `src/__generated__/`.
 - Pages generated from your [views](views), with actions and routes gated by
-  each repository's CRUD set (see [Operation-gated UI actions](operation-gating)).
+  each repository's CRUD set (see [Operation and role gating](operation-gating)).
 
 The rest of the `ui:` block is documented separately:
 
@@ -127,4 +128,4 @@ The rest of the `ui:` block is documented separately:
 - [Collections](collections) -- flattened, formatted presentation models.
 - [Components](components) -- the `generic` component catalog and custom components.
 - [Views](views) -- pages, routes, the `crud` composite, and `field_roles`.
-- [Operation-gated UI actions](operation-gating) -- how CRUD selection drives the UI.
+- [Operation and role gating](operation-gating) -- how CRUD selection and roles drive the UI.

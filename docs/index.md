@@ -103,5 +103,5 @@ YAML Spec --> Parser --> Intermediate Representation --> Code Generator --> Fast
 
 ### Spec Documents
 
-- [YAML Specification v0.1](./YAML-Specification-v0.1.md)
-- [YAML Structure Spec v0.1](./YAML-Structure-Spec-v0.1.md)
+- [v0.1 Specification](./v0.1/specification)
+- [v0.1 Grammar Reference](./v0.1/grammar-reference)

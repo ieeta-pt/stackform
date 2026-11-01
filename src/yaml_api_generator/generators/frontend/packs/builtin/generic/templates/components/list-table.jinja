@@ -1,20 +1,34 @@
+{% from 'macros/access.jinja' import allowed %}
+{% from 'macros/listing.jinja' import search_box, pager %}
+{% set roles = props.field_roles.value if props.field_roles is defined else {} %}
+{% set role_names = roles.values() | select('in', entity.fields) | list %}
+{% set other_names = entity.fields | reject('in', role_names) | list %}
+{% set columns = props.columns.value if props.columns is defined else (role_names + other_names)[:4] %}
+{% set selectable = props.selectable.value %}
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../__generated__/App';
-import { API_BASE_URL } from '../__generated__/config';
+import { Allowed, useAuth } from '../__generated__/App';
+import { displayValue, listRecords } from '../__generated__/records';
+import { useListing } from '../__generated__/listing';
 
 interface {{ entity.name | pascal_case }} {
   {{ entity.pk_field }}: string;
   {% for field in entity.fields.values() %}
   {{ field.name }}: {% if field.type == 'string' %}string{% elif field.type == 'number' %}number{% elif field.type == 'boolean' %}boolean{% else %}any{% endif %};
   {% endfor %}
+  [field: string]: unknown;
 }
+
+const COLUMNS: string[] = {{ columns | tojson }};
 
 export default function {{ view.name | pascal_case }}() {
   const [items, setItems] = useState<{{ entity.name | pascal_case }}[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  {% if selectable %}
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  {% endif %}
+  const listing = useListing(items, COLUMNS, {{ props.pagination.value | tojson }});
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -22,15 +36,9 @@ export default function {{ view.name | pascal_case }}() {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch(`${API_BASE_URL}/{{ entity.repository_name | kebab_case }}`, { headers })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(res.status === 401 ? 'Authentication required' : `Error: ${res.status}`);
-        }
-        return res.json();
-      })
+    listRecords('{{ entity.name }}', headers)
       .then(data => {
-        setItems(Array.isArray(data) ? data : []);
+        setItems(data);
         setLoading(false);
       })
       .catch(err => {
@@ -38,6 +46,7 @@ export default function {{ view.name | pascal_case }}() {
         setLoading(false);
       });
   }, [token]);
+  {% if selectable %}
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -49,12 +58,13 @@ export default function {{ view.name | pascal_case }}() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === items.length) {
+    if (selectedIds.size === listing.rows.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(items.map(i => i.{{ entity.pk_field }})));
+      setSelectedIds(new Set(listing.rows.map(i => i.{{ entity.pk_field }})));
     }
   };
+  {% endif %}
 
   if (loading) {
     return (
@@ -83,7 +93,7 @@ export default function {{ view.name | pascal_case }}() {
             <span className="font-title text-2xl text-wf-ink-faint">∅</span>
           </div>
           <h3 className="font-title text-xl text-wf-ink mb-2">No {{ entity.name | lower }}s yet</h3>
-          {% if 'create' in entity.operations %}
+          {% call allowed(entity, 'create') %}
           <p className="text-wf-ink-dim text-sm mb-4">Create your first record to get started.</p>
           <button
             onClick={() => navigate('{{ view.path }}/new')}
@@ -91,7 +101,7 @@ export default function {{ view.name | pascal_case }}() {
           >
             + New {{ entity.name | title }}
           </button>
-          {% endif %}
+          {% endcall %}
         </div>
       </div>
     );
@@ -99,112 +109,100 @@ export default function {{ view.name | pascal_case }}() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Toolbar */}
       <div className="wf-toolbar px-6 pt-4">
         <h1 className="font-title text-2xl text-wf-ink">{{ entity.name | title }}</h1>
-        <span className="wf-mono">{items.length} records</span>
+        <span className="wf-mono">{listing.found} records</span>
+        {% if selectable %}
+        <span className="wf-mono">{selectedIds.size} selected</span>
+        {% endif %}
         <div className="flex-1" />
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border border-wf-line rounded-[5px] bg-wf-bg min-w-[180px] text-wf-ink-faint text-sm">
-          <span>⌕</span>
-          <span>Search...</span>
-        </div>
-        <button className="wf-btn">
-          Filter
-        </button>
-        <button className="wf-btn">
-          Sort ↓
-        </button>
-        {% if 'create' in entity.operations %}
+        {% if props.searchable.value %}
+        {{ search_box() }}
+        {% endif %}
+        {% call allowed(entity, 'create') %}
         <button
           onClick={() => navigate('{{ view.path }}/new')}
           className="wf-btn wf-btn-primary"
         >
           + New
         </button>
-        {% endif %}
+        {% endcall %}
       </div>
 
-      {/* Table */}
       <div className="flex-1 overflow-auto px-6 pb-6">
         <div className="border border-wf-line rounded-wf overflow-hidden bg-wf-surface">
           <table className="wf-table">
             <thead>
               <tr>
+                {% if selectable %}
                 <th className="w-10">
                   <input
                     type="checkbox"
-                    checked={selectedIds.size === items.length && items.length > 0}
+                    aria-label="Select all"
+                    checked={selectedIds.size === listing.rows.length && listing.rows.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 rounded border-wf-line-strong accent-wf-accent"
                   />
                 </th>
-                <th className="w-24">ID</th>
-                {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
-                {% set role_names = roles.values() | list %}
-                {% set role_fields = [] %}
-                {% for name in role_names %}
-                {% if name in entity.fields %}{% if role_fields.append(entity.fields[name]) %}{% endif %}{% endif %}
-                {% endfor %}
-                {% set other_fields = entity.fields.values() | rejectattr('name', 'equalto', entity.pk_field) | rejectattr('name', 'in', role_names) | list %}
-                {% set display_fields = (role_fields + other_fields)[:4] %}
-                {% for field in display_fields %}
-                <th>{{ field.name | title }}</th>
+                {% endif %}
+                {% for column in columns %}
+                {% if props.sortable.value %}
+                <th aria-sort={listing.sort?.field === {{ column | tojson }} ? (listing.sort.descending ? 'descending' : 'ascending') : 'none'}>
+                  <button type="button" onClick={() => listing.sortBy({{ column | tojson }})}>{{ column | title }}</button>
+                </th>
+                {% else %}
+                <th>{{ column | title }}</th>
+                {% endif %}
                 {% endfor %}
                 <th className="w-16"></th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {listing.rows.map((item) => (
                 <tr
                   key={item.{{ entity.pk_field }}}
+                  {% if selectable %}
                   className={selectedIds.has(item.{{ entity.pk_field }}) ? 'is-selected' : ''}
+                  {% endif %}
                 >
+                  {% if selectable %}
                   <td>
                     <input
                       type="checkbox"
+                      aria-label="Select"
                       checked={selectedIds.has(item.{{ entity.pk_field }})}
                       onChange={() => toggleSelect(item.{{ entity.pk_field }})}
                       className="w-4 h-4 rounded border-wf-line-strong accent-wf-accent"
                     />
                   </td>
+                  {% endif %}
+                  {% for column in columns %}
                   <td>
-                    <span className="wf-mono">{String(item.{{ entity.pk_field }}).slice(0, 8)}...</span>
-                  </td>
-                  {% for field in display_fields %}
-                  <td>
-                    {% if field.type == 'enum' %}
-                    <span className="wf-badge">
-                      {String(item.{{ field.name }} || '—')}
-                    </span>
+                    {% if entity.fields[column] is defined and entity.fields[column].type == 'enum' %}
+                    <span className="wf-badge">{displayValue(item[{{ column | tojson }}])}</span>
                     {% else %}
-                    {String(item.{{ field.name }} || '—')}
+                    {displayValue(item[{{ column | tojson }}])}
                     {% endif %}
                   </td>
                   {% endfor %}
                   <td>
-                    {% if 'get' in entity.operations %}
+                    {% call allowed(entity, 'get') %}
                     <Link
                       to={`{{ view.path }}/${item.{{ entity.pk_field }}}`}
                       className="text-wf-accent hover:text-wf-accent-ink text-sm"
                     >
                       View
                     </Link>
-                    {% endif %}
+                    {% endcall %}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between mt-4 text-sm text-wf-ink-dim">
-          <span>1–{items.length} of {items.length}</span>
-          <div className="flex gap-1">
-            <button className="wf-btn wf-btn-sm wf-btn-ghost" disabled>←</button>
-            <button className="wf-btn wf-btn-sm wf-btn-ghost" disabled>→</button>
-          </div>
-        </div>
+        {% if props.pagination.value %}
+        {{ pager() }}
+        {% endif %}
       </div>
     </div>
   );

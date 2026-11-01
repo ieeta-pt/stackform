@@ -50,18 +50,15 @@ With `api: { basePath: /api, version: v1 }` and `base_path: /my-collection`, the
 
 Type: access value (see [access-control](./access-control.md)). Optional. Default: `public`.
 
-Default access rule applied to every operation. Individual operations override it with their own `access`. If you omit `access` on a minified controller, every operation defaults to `public`, so an entity is only protected once you set a non-public value. Protection is wired only when an identity entity (a `type: auth` entity) exists; with no auth entity in the spec, even non-public routes stay open.
+Default access rule applied to every operation. Individual operations override it with their own `access`. If you omit `access` on a minified controller, every operation defaults to `public`, so an entity is only protected once you set a non-public value. A non-public route needs a `type: auth` entity to authenticate against; without one it answers every request with 401.
 
-> **Enforcement status**
+> **Enforcement**
 >
-> Roles (exact match), `<entity>:*` scoping, and ownership/ABAC `when` rules
+> Roles, role hierarchies, `<entity>:*` scoping, and ownership/ABAC `when` rules
 > are enforced by the generated FastAPI backend, the generated DRF backend, and the
-> `stackform run` dev server alike. A request that fails a rule gets 401 (missing or
-> invalid credentials), 403 (authenticated but not allowed), or 404 (record not
-> found, checked before ownership). Two current limitations: role hierarchy (for
-> example `admin` inheriting `moderator`) is accepted in YAML but not yet applied
-> during enforcement -- only exact role matches are checked; and conditional or
-> ownership rules require a v0.2 spec, because v0.1 specs do not parse `when` rules.
+> `stackform run` dev server alike. A request that no rule admits gets 401 when it
+> carries no valid credentials and 403 otherwise; a missing record answers 404
+> before ownership is checked.
 
 ### `operations`
 
@@ -108,6 +105,8 @@ controllers:
       delete: false             # no DELETE route is generated
 ```
 
+A request using a method that the path does not serve answers `405 Method Not Allowed` with an `Allow` header listing the methods it does serve; a path that serves no method answers 404.
+
 Override the method, path, or access of an operation by giving it a map:
 
 ```yaml
@@ -127,7 +126,7 @@ The `access` value selects who may call an operation:
 - `public` - no authentication required.
 - `"*"` - any authenticated principal.
 - `<entity>:*` - any principal from that auth entity.
-- `<entity>:<role>` - a principal from that entity holding the role (exact match).
+- `<entity>:<role>` - a principal from that entity holding the role, directly or through the role hierarchy.
 - `<role>` - shorthand for the single auth entity in the spec; ambiguous (ACCESS_AMBIGUOUS_ROLE) when more than one auth entity exists, and an error (ACCESS_NO_AUTH_ENTITY) when there is none.
 - a list of rules, including ABAC `given`/`when` rules.
 
@@ -179,6 +178,35 @@ controllers:
 ```
 
 The minified `service` form is sugar that expands to this `routes` form during generation.
+
+The controller-level `access:` is the default of every explicit route that sets
+none; without it the routes are public. `operations.<name>` overrides the
+`method`, `path` or `access` of the route `<name>`, and `operations.<name>: false`
+drops it:
+
+```yaml
+controllers:
+  posts:
+    base_path: /posts
+    access: "*"
+    routes:
+      list: { service: list-posts, method: GET, path: "" }
+      get: { service: get-posts, method: GET, path: "/{id}" }
+      delete: { service: delete-posts, method: DELETE, path: "/{id}" }
+    operations:
+      list: { path: /all, access: public }
+      delete: false
+```
+
+Here `GET /posts/all` is public, `GET /posts/{id}` needs any authenticated
+principal, and there is no delete route.
+
+Each route is built from layers, each overriding the one before:
+
+| Controller form | Layers, least to most specific |
+|-----------------|--------------------------------|
+| Explicit routes (no `service:`) | controller `access` → `routes.<name>` → `operations.<name>` |
+| Minified (`service:`) | controller `access` → the service operation and its default method and path → `operations.<name>` → `routes.<name>` |
 
 ## Example
 

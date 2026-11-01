@@ -7,6 +7,8 @@ The `datastores:` section registers one or more databases by name. Each reposito
 
 A spec that only uses the `mongo:` block (see [`mongo:`](./mongo.md)) is the single-datastore shortcut: it behaves as one default datastore. Use `datastores:` when you need more than one, or a relational database.
 
+A spec cannot declare both `mongo:` and a record datastore (`mongodb` or `postgres`) under `datastores:`: validation rejects it with "mongo and a record datastore are mutually exclusive: declare MongoDB under datastores instead". File datastores (`filesystem`, `s3`) can sit next to `mongo:`.
+
 ## Schema
 
 ```yaml
@@ -95,7 +97,7 @@ repositories:
       recent:
         query:
           sql: "SELECT * FROM events WHERE user_id = :uid ORDER BY at DESC LIMIT 50"
-          params: { uid: "$principal.id" }
+          params: { uid: "$principal.sub" }
 ```
 
 Bindings (`$principal.*`, route params, `$body.*`) are resolved at request time and passed as bound parameters. Mixing the forms (a SQL query on a MongoDB datastore, or a Mongo command on a relational one) is a validation error (`QUERY_FORM_MISMATCH`).

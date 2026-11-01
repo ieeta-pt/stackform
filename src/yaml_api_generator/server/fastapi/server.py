@@ -9,9 +9,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from yaml_api_generator.runtime.lifecycle import Purger
+
 from ..common.context_builder import build_runtime_context
 from ..common.files import build_file_stores, build_record_files
+from ..common.http_middleware import api_middleware
 from ..common.loader import create_repositories, ensure_spec_dir_importable, initialize_indexes
+from ..common.purges import expiring_purges
 from ..common.server_context import RuntimeContext
 from ..common.repositories import RepositoryRegistry
 from ..common.vendored_packages import install_vendored_packages
@@ -86,6 +90,7 @@ def build_app(yaml_file: str, schema_file: str | Path | None = None) -> FastAPI:
     install_vendored_packages(ir.vendored_imports)
     ctx = build_runtime_context(ir)
     stores = build_file_stores(ir)
+    record_files = build_record_files(ir, stores)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -94,25 +99,20 @@ def build_app(yaml_file: str, schema_file: str | Path | None = None) -> FastAPI:
             for store in stores.values():
                 await store.open()
                 stack.push_async_callback(store.close)
+            purger = Purger(expiring_purges(ir, registry, record_files))
+            purger.start()
+            stack.push_async_callback(purger.stop)
             yield
 
     app = FastAPI(lifespan=lifespan)
-
-    if ir.api.cors:
-        from fastapi.middleware.cors import CORSMiddleware
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=ir.api.cors.origins,
-            allow_methods=ir.api.cors.methods,
-            allow_headers=ir.api.cors.headers,
-            allow_credentials=ir.api.cors.credentials,
-        )
 
     if _has_idp_providers(ctx):
         app.add_middleware(_idp_provisioning_middleware(ctx, registry))
     if ctx.session.uses_cookie:
         app.add_middleware(_csrf_middleware())
+    for cls, args, kwargs in reversed(api_middleware(ir.api)):
+        app.add_middleware(cls, *args, **kwargs)
 
-    register_fastapi_routes(app, ctx, registry, build_record_files(ir, stores))
+    register_fastapi_routes(app, ctx, registry, record_files)
 
     return app

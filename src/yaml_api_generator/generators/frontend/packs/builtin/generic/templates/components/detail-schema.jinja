@@ -1,9 +1,17 @@
+{% from 'macros/access.jinja' import allowed %}
+{% from 'macros/delete.jinja' import delete_page, delete_record %}
+{% set roles = props.field_roles.value if props.field_roles is defined else {} %}
+{% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
+{% set status_field = entity.fields[roles.status] if roles.status is defined else none %}
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../__generated__/App';
-import { API_BASE_URL } from '../__generated__/config';
+{{ delete_page(pages) }}
+import { Allowed, useAuth } from '../__generated__/App';
+import { callOperation, displayValue } from '../__generated__/records';
 import { Button } from '../__generated__/components/Button';
+{% if status_field or entity.fields.values() | selectattr('type', 'equalto', 'enum') | first %}
 import { Badge } from '../__generated__/components/Badge';
+{% endif %}
 import { LoadingSpinner } from '../__generated__/components/LoadingSpinner';
 
 interface {{ entity.name | pascal_case }}SchemaProps {
@@ -26,7 +34,7 @@ export function {{ entity.name | pascal_case }}Schema({
       try {
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const res = await fetch(`${API_BASE_URL}/{{ entity.repository_name | kebab_case }}/${id}`, { headers });
+        const res = await callOperation('{{ entity.name }}', 'get', { id, headers });
         if (!res.ok) throw new Error(res.status === 404 ? 'Record not found' : `Error: ${res.status}`);
         setRecord(await res.json());
       } catch (err: any) {
@@ -38,9 +46,6 @@ export function {{ entity.name | pascal_case }}Schema({
     fetchRecord();
   }, [id, token]);
 
-  {% set roles = props.field_roles.value if props.field_roles is defined else {} %}
-  {% set title_field = entity.fields[roles.title] if roles.title is defined else none %}
-  {% set status_field = entity.fields[roles.status] if roles.status is defined else none %}
 
   if (loading) return <LoadingSpinner message="Loading..." />;
 
@@ -74,9 +79,12 @@ export function {{ entity.name | pascal_case }}Schema({
           <Badge value={String(record.{{ status_field.name }})} size="sm" />
           {% endif %}
         </div>
+        {% call allowed(entity, 'edit') %}
         <Button size="sm" variant="secondary" onClick={() => navigate(`${basePath}/${id}/edit`)}>
           Edit
         </Button>
+        {% endcall %}
+        {{ delete_record(entity, pages) }}
       </div>
 
       {/* Schema-aware field grid */}
@@ -133,9 +141,9 @@ export function {{ entity.name | pascal_case }}Schema({
             {% elif field.type == 'boolean' %}
             <span className="wf-mono">{String(record.{{ field.name }})}</span>
             {% elif field.type == 'number' %}
-            <span className="wf-mono">{String(record.{{ field.name }} ?? '—')}</span>
+            <span className="wf-mono">{displayValue(record.{{ field.name }})}</span>
             {% else %}
-            <span className="whitespace-pre-wrap">{String(record.{{ field.name }} ?? '—')}</span>
+            <span className="whitespace-pre-wrap">{displayValue(record.{{ field.name }})}</span>
             {% endif %}
           </div>
         </div>

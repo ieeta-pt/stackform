@@ -1,9 +1,9 @@
 ---
 title: "`api:`"
-description: The `api:` section sets URL prefixes (basePath/version), the default port, CORS, and which CRUD and auth operations are generated.
+description: The `api:` section sets URL prefixes (basePath/version), the default port, CORS, security headers, and which CRUD and auth operations are generated.
 ---
 
-The `api:` section controls global API settings: the URL prefix (`basePath` + `version`), the default port, CORS, and which CRUD and auth operations the generator produces.
+The `api:` section controls global API settings: the URL prefix (`basePath` + `version`), the default port, CORS, standard security headers, and which CRUD and auth operations the generator produces.
 
 ## Schema
 
@@ -17,6 +17,7 @@ api:
     methods: ["*"]
     headers: ["*"]
     credentials: false
+  securityHeaders: true   # optional, default: true
   operations:
     defaults:             # optional; use this to DISABLE ops (all six are on by default)
       replace: false
@@ -56,9 +57,7 @@ The same prefix is used to derive the frontend's API base URL (`basePath` plus t
 
 Type: integer (1-65535). Default: `8000`.
 
-The port baked into the generated FastAPI app. It can be overridden at runtime with the `PORT` environment variable. This field is read only for `version: "0.2"` specs.
-
-For the `stackform run` dev server the port comes from the `-p`/`--port` flag (default 8000), not from this field.
+The port the API listens on. `stackform run` binds to it unless `-p`/`--port` is given; every generated backend (FastAPI, Django REST Framework, raw ASGI) uses it as its `PORT` setting, which the `PORT` environment variable overrides at runtime; and `deploy.port` defaults to it.
 
 ### `cors`
 
@@ -72,6 +71,22 @@ Configures Cross-Origin Resource Sharing (CORS). When the `cors:` block is omitt
 | `methods` | list of strings | `["*"]` | Allowed HTTP methods. |
 | `headers` | list of strings | `["*"]` | Allowed HTTP headers. |
 | `credentials` | boolean | `false` | Allow credentials (cookies, authorization headers). |
+
+### `securityHeaders`
+
+Type: boolean. Default: `true`.
+
+Adds standard security headers to every response of the dev server and of every generated backend:
+
+| Header | Value |
+|--------|-------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `no-referrer` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+| `Cross-Origin-Opener-Policy` | `same-origin` |
+
+A header the response already carries is left as it is. Set `securityHeaders: false` when a reverse proxy in front of the API sets these headers.
 
 ### `operations.defaults`
 
@@ -103,7 +118,7 @@ A repository can further narrow its own operations with its `crud:` list, and a 
 
 Type: object (operation flags). Optional.
 
-Controls the `register` and `login` endpoints for `type: auth` entities. These are **not generated unless you list them here.** Omitting `operations.auth` produces an auth entity with no register or login route.
+Controls the `register` and `login` endpoints for `type: auth` entities. These are **not generated unless you list them here.** Omitting `operations.auth` produces an auth entity with no register or login route. A controller that declares a `login` route still serves login for its own identity.
 
 | Field | Type | Default |
 |-------|------|---------|
@@ -131,12 +146,12 @@ A disabled operation is removed end to end: no repository method, no service, no
 
 ## Environment-variable interpolation
 
-Any string value in the spec, including those under `api:`, may reference an environment variable with `${VAR}` or `${VAR:-default}`. Interpolation runs after the YAML is loaded and before schema validation, so the substituted value must still satisfy the schema. A missing variable with no default aborts generation with `Environment variable 'VAR' is required`.
+Any string value in the spec, including those under `api:`, may reference an environment variable with `${VAR}` or `${VAR:-default}`. Interpolation runs after the YAML is loaded and before schema validation, so the substituted value must still satisfy the schema. The result is always a string, so interpolate only string-typed keys: `port: ${PORT}` fails with `SCHEMA_VALIDATION_ERROR`; set the runtime port through the `PORT` environment variable of the generated app instead. A missing variable with no default aborts generation with `Environment variable 'VAR' is required`.
 
 ```yaml
 api:
   basePath: ${API_BASE_PATH:-/api}
-  port: ${PORT:-8000}
+  version: ${API_VERSION:-v1}
 ```
 
 ## Example

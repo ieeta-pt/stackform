@@ -1,5 +1,9 @@
-import pytest
+import textwrap
 
+import pytest
+from click.testing import CliRunner
+
+from yaml_api_generator.cli import cli
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors, load_and_generate_ir
 from tests.conftest import INVALID_DIR, VALID_DIR
 
@@ -99,3 +103,50 @@ def test_v01_password_field_forbidden_error() -> None:
     codes = {e.code for e in exc_info.value.errors}
     assert "AUTH_PASSWORD_FIELD_FORBIDDEN" in codes
     assert "AUTH_PASSWORD_HASH_FIELD_FORBIDDEN" in codes
+
+
+_SPEC = """
+    version: "0.2"
+    api: { basePath: /api }
+    mongo: { uri: "mongodb://localhost:27017", database: db }
+    repositories:
+      posts: { entity: post, operations: { recent: OPERATION } }
+    entities:
+      post:
+        fields:
+          id: { type: id }
+          lsit: { type: string }
+    services:
+      posts:
+        repository: posts
+        operations:
+          SWITCH
+    controllers:
+      posts: { service: posts, base_path: /posts, access: public }
+"""
+
+
+def _spec(tmp_path, operation: str = "{ handler: ops.recent }", switch: str = "list: true"):
+    path = tmp_path / "spec.yaml"
+    path.write_text(textwrap.dedent(_SPEC).lstrip().replace("OPERATION", operation).replace("SWITCH", switch))
+    return path
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["{ handler: ops.recent, query: { command: find, filter: {} } }", "{}"],
+    ids=["both", "neither"],
+)
+def test_repository_operation_declares_exactly_one_of_query_or_handler(tmp_path, operation) -> None:
+    with pytest.raises(ConfigErrors) as exc_info:
+        load_and_generate_ir(str(_spec(tmp_path, operation)))
+    assert [(e.code, e.message) for e in exc_info.value.errors] == [
+        ("SCHEMA_VALIDATION_ERROR", "an operation declares exactly one of 'query' or 'handler'")
+    ]
+
+
+def test_error_line_is_the_key_its_path_names(tmp_path) -> None:
+    spec = _spec(tmp_path, switch="lsit: false")
+    result = CliRunner().invoke(cli, ["build", str(spec), "backend", "--output", str(tmp_path / "out")])
+    assert result.exit_code == 1
+    assert f"{spec}:15:services.posts.operations.lsit: error:" in result.stderr

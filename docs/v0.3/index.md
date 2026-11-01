@@ -4,7 +4,7 @@ description: Spec version 0.3 adds multi-file specs, a richer access-rule gramma
 ---
 
 Spec version 0.3 builds on [v0.2](/docs/v0.2). A spec opts in with
-`version: 0.3`; v0.2 specs keep working unchanged.
+`version: "0.3"`.
 
 ## Spec structure
 
@@ -15,13 +15,10 @@ Spec version 0.3 builds on [v0.2](/docs/v0.2). A spec opts in with
 
 ## Access rules and binding
 
-- [Access and binding grammar reference](/docs/v0.3/grammar-reference) — the complete rule grammar
-- [Access-rule `role:`](/docs/v0.3/access-role) — requiring a role on the long rule form
+- [Grammar reference](/docs/v0.3/grammar-reference) — every spec key and the complete rule grammar
 - [Access-rule `bind:`](/docs/v0.3/controller-bind) — supplying trusted service inputs from a rule
 - [The `where` binding form](/docs/v0.3/given-where) — deriving repository filters from the principal
-- [Explainable access denials](/docs/v0.3/access-reason) — attaching a reason to a deny rule
-- [The removed access-rule `filter` key](/docs/v0.3/removed-filter-key)
-- [The removed access-rule `writeFields` key](/docs/v0.3/removed-write-fields-key)
+- [Explainable access denials](/docs/v0.3/access-reason) — a safe, rule-specific reason in a 403
 
 ## Services and data
 
@@ -30,6 +27,12 @@ Spec version 0.3 builds on [v0.2](/docs/v0.2). A spec opts in with
 - [Freely-named single-record tokens](/docs/v0.3/free-slug-fetch) — fetching one record by an arbitrary field
 - [Unique violations and `409 Conflict`](/docs/v0.3/conflict-status) — mapping unique constraints to a status
 - [MongoDB migrations](/docs/v0.3/mongo-migrations) — revision ledger, autogeneration, and baseline stamping
+
+## Files
+
+- [File fields](/docs/v0.3/file-fields) — the `file` type, its stored metadata, and size and type limits
+- [File datastores](/docs/v0.3/file-datastores) — filesystem and S3-compatible storage for file bytes
+- [File endpoints](/docs/v0.3/file-endpoints) — multipart uploads and per-field download, replace and delete routes
 
 ## Authentication
 

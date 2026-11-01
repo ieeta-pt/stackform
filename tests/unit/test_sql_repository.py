@@ -8,6 +8,7 @@ import sqlalchemy as sa
 import pytest
 
 from yaml_api_generator.ir import IRCollection
+from yaml_api_generator.runtime.sql_types import JsonNumber
 from yaml_api_generator.server.common.repositories.sql import SQLRepository
 from yaml_api_generator.server.common.repositories.sql_schema import table_from_collection
 
@@ -52,7 +53,7 @@ def test_table_from_collection_maps_types_and_constraints():
     assert table.c.id.primary_key
     assert isinstance(table.c.kind.type, sa.String)
     assert table.c.kind.nullable is False
-    assert isinstance(table.c.score.type, sa.Numeric)
+    assert isinstance(table.c.score.type, JsonNumber)
     assert isinstance(table.c.active.type, sa.Boolean)
     assert isinstance(table.c.tags.type, sa.JSON)
     checks = {c.name for c in table.constraints if isinstance(c, sa.CheckConstraint)}

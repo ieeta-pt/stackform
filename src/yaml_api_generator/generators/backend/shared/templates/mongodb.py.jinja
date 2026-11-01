@@ -1,26 +1,7 @@
 from pymongo import AsyncMongoClient
 
 from {{ settings_module }} import settings
-
-
-_NON_NULL_BSON_TYPES = [
-    "double",
-    "string",
-    "object",
-    "array",
-    "binData",
-    "objectId",
-    "bool",
-    "date",
-    "regex",
-    "javascript",
-    "int",
-    "timestamp",
-    "long",
-    "decimal",
-    "minKey",
-    "maxKey",
-]
+from {{ runtime_package }}mongo_lifecycle import MongoLifecycle
 
 
 _client: AsyncMongoClient | None = None
@@ -47,12 +28,8 @@ def get_database():
     return _db
 
 
-async def initialize_indexes(unique_indexes: dict[str, list[str]]) -> None:
+async def initialize_indexes(unique_indexes: dict[str, dict]) -> None:
     db = get_database()
-    for collection_name, fields in unique_indexes.items():
-        for field_name in fields:
-            await db[collection_name].create_index(
-                field_name,
-                unique=True,
-                partialFilterExpression={field_name: {"$type": _NON_NULL_BSON_TYPES}},
-            )
+    for collection_name, index in unique_indexes.items():
+        for field_name in index["fields"]:
+            await MongoLifecycle(index["lifecycle"]).keep_unique(db[collection_name], field_name)

@@ -3,11 +3,14 @@ title: "Controller Operations"
 description: Each key under controllers.<name>.operations configures or overrides one HTTP route.
 ---
 
-Each key under `controllers.<name>.operations` overrides one HTTP route on a
-minified controller. The set of routes a controller exposes is decided by the
-service group it points at (see "Which operations exist" below); the
-`operations:` map only customizes method, path, and access for those routes, or
-disables them with `<op>: false`.
+Each key under `controllers.<name>.operations` overrides one HTTP route of the
+controller. On a minified controller the routes are those of the service group
+it points at (see "Which operations exist" below); on an
+[explicit routes](overview.md#explicit-routes-form) controller they are the
+entries of its `routes:` map. The `operations:` map only customizes method,
+path, and access for those routes, or drops them with `<op>: false`. Naming a
+route the controller does not expose is reported as
+`DESUGAR_OPERATION_NOT_EXPOSED`.
 
 ## Operation config fields
 
@@ -147,9 +150,8 @@ silently makes every operation public.
 
 > **Watch out**
 >
-> Routes are only actually protected once at least one `type: auth` entity
-> exists in the spec. With no auth entity in the spec, even non-`public` routes
-> stay open.
+> A non-`public` route needs a `type: auth` entity to authenticate against.
+> With no auth entity in the spec, such a route answers every request with 401.
 
 ## Auth operations are off by default
 
@@ -237,13 +239,10 @@ Notes on the rule object:
   `REQUEST_PATH_PARAM_NOT_DECLARED`, `REQUEST_TYPE_NOT_FOUND`,
   `REQUEST_BINDING_INVALID`).
 
-> **Enforcement status**
+> **Enforcement**
 >
-> Roles (exact match), `<entity>:*` scoping, and ownership/ABAC `when` rules
+> Roles, role hierarchies, `<entity>:*` scoping, and ownership/ABAC `when` rules
 > are enforced by the generated FastAPI backend, the generated DRF backend, and the
-> `stackform run` dev server alike. A request that fails a rule gets 401 (missing or
-> invalid credentials), 403 (authenticated but not allowed), or 404 (record not
-> found, checked before ownership). Two current limitations: role hierarchy (for
-> example `admin` inheriting `moderator`) is accepted in YAML but not yet applied
-> during enforcement -- only exact role matches are checked; and conditional or
-> ownership rules require a v0.2 spec, because v0.1 specs do not parse `when` rules.
+> `stackform run` dev server alike. A request that no rule admits gets 401 when it
+> carries no valid credentials and 403 otherwise; a missing record answers 404
+> before ownership is checked.

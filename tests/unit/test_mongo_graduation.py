@@ -18,10 +18,12 @@ import pytest
 from fastapi import APIRouter
 
 from yaml_api_generator.cli.compiler import compile_project
+from yaml_api_generator.runtime import security_headers
 from yaml_api_generator.parsers.yaml_parser import ConfigErrors
 from yaml_api_generator.server.common.loader import SchemaManagement, create_repositories
 from yaml_api_generator.server.common.repositories import MongoRepository
 from yaml_api_generator.server.common.repositories.sql import SQLRepository
+from yaml_api_generator.runtime import lifecycle
 
 
 _SPEC = """
@@ -157,6 +159,11 @@ def _generated_app_dependencies(initialize_indexes) -> dict[str, types.ModuleTyp
         "dependencies.postgres": _stub(
             "dependencies.postgres", connect_db=_noop, close_db=_noop
         ),
+        "dependencies.security_headers": security_headers,
+        "dependencies.lifecycle": lifecycle,
+        "dependencies.repositories": _stub(
+            "dependencies.repositories", expiring_purges=lambda: []
+        ),
         "conflicts": _stub("conflicts", ConflictError=_Conflict),
         "services": _stub("services"),
         "services.exceptions": _stub(
@@ -167,10 +174,13 @@ def _generated_app_dependencies(initialize_indexes) -> dict[str, types.ModuleTyp
     }
 
 
+_SLUG_INDEX = {"notes": {"lifecycle": {"removal": None, "expiry": None}, "fields": ["slug"]}}
+
+
 async def _indexes_created_at_startup(
     project_dir: Path, *migration_trees: str
-) -> list[dict[str, list[str]]]:
-    created: list[dict[str, list[str]]] = []
+) -> list[dict[str, dict]]:
+    created: list[dict[str, dict]] = []
 
     async def initialize_indexes(unique_indexes):
         created.append(unique_indexes)
@@ -191,12 +201,12 @@ async def _indexes_created_at_startup(
 class TestGeneratedFastAPIStartup:
     @pytest.mark.asyncio
     async def test_creates_indexes_when_not_graduated(self, tmp_path):
-        assert await _indexes_created_at_startup(tmp_path) == [{"notes": ["slug"]}]
+        assert await _indexes_created_at_startup(tmp_path) == [_SLUG_INDEX]
 
     @pytest.mark.asyncio
     async def test_creates_indexes_under_an_alembic_tree_alone(self, tmp_path):
         created = await _indexes_created_at_startup(tmp_path, "migrations")
-        assert created == [{"notes": ["slug"]}]
+        assert created == [_SLUG_INDEX]
 
     @pytest.mark.asyncio
     async def test_skips_indexes_when_graduated(self, tmp_path):
@@ -206,7 +216,7 @@ class TestGeneratedFastAPIStartup:
 
 @pytest.mark.parametrize(
     ("target", "startup_file"),
-    [("drf", "api/apps.py"), ("raw", "app.py")],
+    [("drf", "project/asgi.py"), ("raw", "app.py")],
 )
 def test_generated_mongo_targets_initialize_indexes_before_graduation(
     tmp_path, target, startup_file
@@ -216,7 +226,7 @@ def test_generated_mongo_targets_initialize_indexes_before_graduation(
 
     source = (tmp_path / "backend" / startup_file).read_text()
     assert "initialize_indexes" in source
-    assert '{"notes": ["slug"]}' in source
+    assert repr(_SLUG_INDEX) in source
     assert compileall.compile_dir(str(tmp_path / "backend"), quiet=2)
 
 
@@ -229,7 +239,7 @@ def test_generated_drf_views_package_does_not_import_absent_route_classes(tmp_pa
 
 @pytest.mark.parametrize(
     ("target", "startup_file"),
-    [("drf", "api/apps.py"), ("raw", "app.py")],
+    [("drf", "project/asgi.py"), ("raw", "app.py")],
 )
 def test_generated_mongo_targets_skip_indexes_after_graduation(
     tmp_path, target, startup_file

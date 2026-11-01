@@ -10,8 +10,10 @@ from yaml_api_generator.ir import (
     IRRequestBinding,
     WhereRhs,
 )
-from yaml_api_generator.ir.api import IRPagination, IRRolesConfig
+from yaml_api_generator.ir.api import CallerDemand, IRDto, IRPagination, IRRolesConfig
 from yaml_api_generator.ir.when import WhenExpr
+from yaml_api_generator.runtime.access import Roles
+from yaml_api_generator.runtime.lifecycle import Lifecycle
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class RuntimeCollectionDescriptor:
     fields: dict[str, Any]
     datastore: str | None = None
     files: Mapping[str, IRFileField] = field(default_factory=dict)
+    lifecycle: Lifecycle = Lifecycle()
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,11 @@ class RuntimeIdentityDescriptor:
     id_field: str
     roles: IRRolesConfig | None = None
     roles_field: str | None = None
+    default_role: str | None = None
+
+    @property
+    def role_store(self) -> Roles:
+        return Roles(self.roles_field, self.default_role)
 
     @property
     def has_password(self) -> bool:
@@ -53,7 +61,7 @@ class RuntimeIdentityDescriptor:
 
 
 @dataclass(frozen=True)
-class RuntimeAccessRule:
+class RuntimeAccessRule(CallerDemand):
     principal: str
     required_role: str | None = None
     identity_symbols: dict[str, IRIdentityBinding] = field(default_factory=dict)
@@ -77,6 +85,9 @@ class RuntimeRouteDescriptor:
     service_input: dict[str, Any] | None = None
     service_forwarding: dict[str, Any] = field(default_factory=dict)
     pagination: IRPagination | None = None
+    body_dto: IRDto | None = None
+    record_param: str | None = None
+    scope: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

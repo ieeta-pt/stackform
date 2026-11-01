@@ -1,8 +1,9 @@
 version: "0.3"
 
 api:
-  name: v03-secure-session
   basePath: /api
+  operations:
+    auth: { login: true }
 
 session:
   algorithm: RS256
@@ -41,7 +42,7 @@ controllers:
     operations:
       list: true
       get: true
-      create: public
+      create: true
       update: true
       replace: false
       delete: true

@@ -1,140 +1,173 @@
 ---
-title: "Operation-Gated UI Actions"
-description: The generated React app only renders actions and routes for the CRUD operations each repository actually exposes.
+title: "Operation and Role Gating"
+description: The generated React app shows an action or route only when the server would serve that operation to the signed-in caller.
 ---
 
-The generated React app never shows an action the backend cannot serve. Every
+The generated React app never offers an action the server would refuse. Every
 button (New, View, Edit, Delete) and every client-side route (`/new`, `/:id`,
-`/:id/edit`) is gated on the CRUD operations that the backing repository's
-`crud` set exposes. Disable an operation in your spec and its UI affordance
-disappears along with its HTTP route. This is the frontend half of
-[composable per-operation CRUD](../repositories/composable-crud).
+`/:id/edit`) passes two gates:
 
-## Where the operation set comes from
+1. **Operation gate**, at build time: the operation exists, because the backing
+   repository's `crud` set exposes it. An absent operation emits no button and
+   no route.
+2. **Access gate**, at run time: the signed-in caller holds a role the
+   operation's access rules admit, with the role hierarchy applied. A refused
+   operation hides its button, and its route renders a "no access" page (or the
+   login page for an anonymous caller).
 
-Each entity rendered in the UI carries the exact set of CRUD operations its
-repository exposes. That set is derived from the routes the generator emits,
-which in turn come from the repository's `crud` list (default: all six of
-`list`, `get`, `create`, `update`, `replace`, `delete`). Drop an operation from
-`crud` and it is absent from the repository, the service, the HTTP route, and
-the UI.
+## Example
 
 ```yaml
+version: "0.2"
+
 api:
   basePath: /api
-  version: v1
+
+entities:
+  member:
+    type: auth
+    auth: { identifier: handle, via: password }
+    roles:
+      values: [owner, editor, viewer]
+      default: viewer
+      hierarchy:
+        owner: [editor]
+        editor: [viewer]
+    fields:
+      id: { type: id }
+      handle: { type: string, required: true, unique: true }
+  doc:
+    fields:
+      id: { type: id }
+      title: { type: string, required: true }
+  note:
+    fields:
+      id: { type: id }
+      body: { type: string, required: true }
 
 repositories:
-  myCollection:
-    entity: myEntity
-    crud: [create, list, get, update, delete]
-  myOtherCollection:
-    entity: myOtherEntity
+  members: { entity: member }
+  docs:
+    entity: doc
+    crud: [list, get, create, update, delete]
+  notes:
+    entity: note
     crud: [create, list, get, delete]   # no update -> no Edit anywhere
+
+services:
+  docs: { repository: docs }
+  notes: { repository: notes }
+
+controllers:
+  docs:
+    service: docs
+    base_path: /docs
+    access: member:viewer
+    operations:
+      create: { access: member:editor }
+      update: { access: member:editor }
+      delete: { access: member:owner }
+  notes:
+    service: notes
+    base_path: /notes
+    access: member:viewer
+
+ui:
+  frontend: { pack: generic, output: ./frontend }
+  config: { app_name: Docs }
+  views:
+    docs:
+      path: /docs
+      component: crud
+      props: { collection: doc }
+    notes:
+      path: /notes
+      component: crud
+      props: { collection: note }
 ```
 
-With this spec, `myCollection` renders the full action set; `myOtherCollection`
-renders everything except Edit, because `update` is not in its `crud` list.
+With this spec:
 
-## Per-surface gating
+| Caller | Docs | Notes |
+|--------|------|-------|
+| viewer | list, View | list, View, New, Delete |
+| editor | list, View, New, Edit | list, View, New, Delete |
+| owner  | list, View, New, Edit, Delete | list, View, New, Delete |
 
-The pack gates actions on the surface where they live. The mapping from CRUD
-operation to UI affordance is:
+Notes never show Edit, because `update` is not in its repository's `crud` list.
+An editor sees what a viewer sees because `editor` includes `viewer`; an owner
+sees everything because `owner` includes `editor`.
 
-| Operation | Surface | Affordance gated on it |
-|-----------|---------|------------------------|
-| `create`  | List page | "New" button (and the empty-state "Create your first record" button) |
+## Operation gate
+
+Each entity rendered in the UI carries the CRUD operations its repository
+exposes, taken from the repository's `crud` list (default: all six of `list`,
+`get`, `create`, `update`, `replace`, `delete`). An operation absent from `crud`
+is absent from the repository, the service, the HTTP route and the UI.
+
+| Operation | Surface | Affordance |
+|-----------|---------|------------|
+| `create`  | List page | "New" button (and the empty-state create button) |
 | `get`     | List page | "View" link on each row |
 | `update`  | Detail page | "Edit" button |
-| `delete`  | Detail page | "Delete" button |
+| `delete`  | Detail page | "Delete" button, from the view's `delete` component |
 
-If an operation is not in the entity's set, its button or link is simply not
-emitted into the generated `.tsx` page.
+A `crud` view registers up to four routes, each only when its operation exists:
 
-## Route gating
+| Route | Renders | Needs |
+|-------|---------|-------|
+| `/docs`          | List page   | `list` |
+| `/docs/new`      | Form (create) | `create` |
+| `/docs/:id`      | Detail page | `get` |
+| `/docs/:id/edit` | Form (edit) | `update` |
 
-A `crud` view generates three page files (the list, a form, and a detail page)
-and registers up to four routes. The list route is always present; the other
-three are gated identically to the buttons that navigate to them:
+## Access gate
 
-| Route | Renders | Gated on |
-|-------|---------|----------|
-| `/my-collection`          | List page   | always (the view's `path`) |
-| `/my-collection/new`      | Form (create) | `create` |
-| `/my-collection/:id`      | Detail page | `get` |
-| `/my-collection/:id/edit` | Form (edit) | `update` |
+The app generates `src/__generated__/access.ts`, the same decision the server
+makes, as data:
 
-Because the route is omitted, navigating to it directly resolves to nothing.
-There is no Edit button to reach `/my-collection/:id/edit`, and the route itself
-is not registered.
+- `ACCESS[entity][operation][column]` is the verdict for each column of callers:
+  `anonymous`, and one column per identity role (`member.owner`,
+  `member.editor`, `member.viewer`), or one per identity entity without roles.
+  A verdict is `allow`, `deny`, or `conditional` when the admitting rule has a
+  `when` condition the server checks against the record.
+- `ROLES[identity].includes` lists, per role, every role it includes, flattened
+  from `entities.<e>.roles.hierarchy` (`owner: [editor, viewer]` above).
+- `allows(entity, operation, caller)` is true when some column the caller
+  occupies has a verdict other than `deny`. A caller occupies a role column when
+  it holds that role or a role that includes it. A `conditional` verdict shows
+  the action and leaves the record check to the server.
+- `grants(caller, role)` is true for the roles the caller holds, directly or by
+  inclusion. A role select disables every other option, since the server drops a
+  role the caller cannot grant.
 
-The `crud` composite component wires all of this for you:
-
-```yaml
-ui:
-  frontend:
-    pack: generic
-  config:
-    app_name: My App
-  views:
-    myCollection:
-      path: /my-collection
-      component: crud
-      props:
-        entity: myEntity
-    myOtherCollection:
-      path: /my-other-collection
-      component: crud
-      props:
-        entity: myOtherEntity
-```
-
-For `myOtherCollection` (no `update`), the generated app omits the Edit button
-on the detail page and never registers `/my-other-collection/:id/edit`. Create,
-View, and Delete all remain because `create`, `get`, and `delete` are in its
-`crud` list.
-
-```mermaid
-flowchart TD
-  crud["repository crud: [create, list, get, delete]"] --> ops["entity operation set"]
-  ops --> c{create?}
-  ops --> g{get?}
-  ops --> u{update?}
-  ops --> d{delete?}
-  c -- yes --> cnew["New button + /my-other-collection/new route"]
-  g -- yes --> gview["View link + /my-other-collection/:id route"]
-  u -- no --> unone["no Edit button, no /my-other-collection/:id/edit route"]
-  d -- yes --> ddel["Delete button"]
-```
+The caller comes from the session: password login and the code exchange that ends
+an OIDC or SAML sign-in both answer the signed-in record and the roles it holds,
+whether they are managed roles or a role field.
 
 ## Login gate
 
-When the spec declares any `type: auth` entity, the app wraps every route in an
-authentication gate. The gate is controlled by `ui.config.require_auth`, which
-defaults to `true`:
+When the spec declares a `type: auth` entity, the app has a login page. With
+`ui.config.require_auth: true`, every route shows the login page until a session
+exists; it defaults to `false`, leaving pages open and gated by the access gate
+alone:
 
 ```yaml
 ui:
   config:
-    require_auth: true   # default; set false to leave the app open
+    require_auth: true
 ```
 
-With the gate on, an unauthenticated visitor is shown the login page and only
-sees the app shell once a token is stored. The generated app exposes a
-`useAuth()` hook (`token`, `user`, `login`, `logout`); the sidebar shows a
-Logout action when signed in and a Login link otherwise.
-
-External identity providers bound to the auth entity are surfaced as SSO
-buttons on the login page. The app fetches the provider list from
-`GET {basePath}[/{version}]/{collection}/auth/providers` and renders a
-"Continue with ..." button for each, redirecting to
-`{basePath}[/{version}]/{collection}/auth/{provider}` to start the flow. See
+The generated app exposes a `useAuth()` hook (`token`, `user`, `caller`, `login`,
+`logout`). External identity providers bound to the auth entity appear as sign-in
+buttons on the login page, read from
+`GET {basePath}[/{version}]/{collection}/auth/providers`. See
 [Login, SSO, and the token flow](../auth/login-and-sso) for the backend side.
 
 ## See also
 
 - [Composable per-operation CRUD](../repositories/composable-crud) - the
-  backend mechanism this gating mirrors.
+  repository `crud` list the operation gate mirrors.
+- [Roles](../roles/overview) and [role hierarchy](../roles/hierarchy) - the
+  rules the access gate mirrors.
 - [UI Views](views) - how a `crud` view expands into pages and routes.
-- [Authentication required by default](../auth/auth-required-by-default) - how
-  routes are protected once an auth entity exists.

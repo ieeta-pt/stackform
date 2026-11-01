@@ -1,0 +1,21 @@
+{# Controls over the `listing` a list page holds from `useListing`. #}
+{% macro search_box() %}
+<input
+  type="search"
+  aria-label="Search"
+  placeholder="Search..."
+  value={listing.search}
+  onChange={(event) => listing.searchFor(event.target.value)}
+  className="wf-input min-w-[180px]"
+/>
+{% endmacro %}
+
+{% macro pager() %}
+<div className="flex items-center justify-between mt-4 text-sm text-wf-ink-dim">
+  <span>Page {listing.page + 1} of {listing.pages}</span>
+  <div className="flex gap-1">
+    <button type="button" aria-label="Previous page" className="wf-btn wf-btn-sm wf-btn-ghost" disabled={listing.page === 0} onClick={() => listing.turnTo(listing.page - 1)}>←</button>
+    <button type="button" aria-label="Next page" className="wf-btn wf-btn-sm wf-btn-ghost" disabled={listing.page + 1 >= listing.pages} onClick={() => listing.turnTo(listing.page + 1)}>→</button>
+  </div>
+</div>
+{% endmacro %}

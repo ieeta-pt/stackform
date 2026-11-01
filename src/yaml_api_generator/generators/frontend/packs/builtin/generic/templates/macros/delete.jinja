@@ -1,0 +1,82 @@
+{% from 'macros/access.jinja' import allowed %}
+{#
+  A Delete button whose dialog, the content of the `call`, deletes the record `id`
+  (else the route's `:id`) of `entity` through its delete operation. The dialog calls
+  `remove(callback)` to delete and `cancel()` to close; `callbacks` are the props it
+  runs once the record is gone, and `onDeleted` runs after every deletion.
+#}
+{% macro deletion(entity, callbacks) %}
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useAuth } from '../__generated__/App';
+import { callOperation, failure } from '../__generated__/records';
+import { Button } from '../__generated__/components/Button';
+
+interface DeleteProps {
+  id?: string;
+  onDeleted?: () => void;
+  onCancel?: () => void;
+  {% for callback in callbacks %}
+  {{ callback }}?: () => void;
+  {% endfor %}
+}
+
+export default function Delete{{ entity.name | pascal_case }}({ id, onDeleted, onCancel{% for callback in callbacks %}, {{ callback }}{% endfor %} }: DeleteProps) {
+  const params = useParams<{ id: string }>();
+  const { token } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const remove = async (callback?: () => void) => {
+    setLoading(true);
+    setError(null);
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await callOperation({{ entity.name | tojson }}, 'delete', { id: id ?? params.id, headers });
+    setLoading(false);
+    setOpen(false);
+    if (!res.ok) return setError((await failure(res, `Error: ${res.status}`)).message);
+    callback?.();
+    onDeleted?.();
+  };
+
+  const cancel = () => {
+    setOpen(false);
+    onCancel?.();
+  };
+
+  return (
+    <>
+      <Button size="sm" variant="danger" onClick={() => setOpen(true)}>
+        Delete
+      </Button>
+      {error && <p role="alert" className="text-sm text-wf-danger">{error}</p>}
+      {open && (
+        <div className="wf-overlay" role="dialog" aria-modal="true">
+          <div className="wf-modal max-w-md w-full">
+            <div className="p-6">
+              {{ caller() }}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+{% endmacro %}
+
+{# The import of a crud view's delete page, which `delete_record` renders. #}
+{% macro delete_page(pages) %}
+{% if pages %}
+import DeleteRecord from './{{ pages.delete }}';
+{% endif %}
+{% endmacro %}
+
+{# A crud detail page's Delete action, back on `basePath` once the record is gone. #}
+{% macro delete_record(entity, pages) %}
+{% if pages %}
+{% call allowed(entity, 'delete') %}
+<DeleteRecord onDeleted={() => navigate(basePath)} />
+{% endcall %}
+{% endif %}
+{% endmacro %}

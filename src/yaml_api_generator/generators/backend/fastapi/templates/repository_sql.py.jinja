@@ -1,24 +1,46 @@
+{% from "repository_class.jinja" import repository_class with context %}
 {% set class_name = collection_name | capitalize_collection %}
+{% set is_abstract = abstract | default(false) %}
+{% if custom_operations %}
+from typing import Any
+
+{% endif %}
+{% if not is_abstract %}
 import sqlalchemy as sa
 
+{% if lifecycle.removal or lifecycle.expiry %}
+from dependencies.lifecycle import Expiry, Lifecycle
+{% endif %}
 from dependencies.postgres import metadata
+{% if lifecycle.removal %}
+from dependencies.sql_lifecycle import unique_index
+{% endif %}
+from dependencies.sql_types import IsoDateTime, JsonNumber
 from ._sql_ops import SQLRepositoryBase{% for op in operations %}, {{ op | capitalize }}Op{% endfor %}
+
+{% endif %}
+{% if generated_base %}
+from {{ generated_base.module }} import {{ generated_base.class_name }}
+{% endif %}
+{% if not is_abstract %}
 
 
 {{ collection_name }}_table = sa.Table(
     "{{ collection_name }}",
     metadata,
 {% for field_name, field_cfg in fields.items() if field_cfg is mapping %}
-    {{ field_name | sql_column(field_cfg, id_field) }},
+    {{ field_name | sql_column(field_cfg, id_field, lifecycle.removal) }},
 {% endfor %}
+{% if lifecycle.removal %}
+{% for field_name, field_cfg in fields.items() if field_cfg is mapping and field_cfg.get("unique") %}
+    unique_index("{{ collection_name }}", "{{ field_name }}", "{{ lifecycle.removal }}"),
+{% endfor %}
+{% endif %}
 {% if collection_type == "auth" and "_auth" not in fields %}
     sa.Column("_auth", sa.JSON(), nullable=True),
 {% endif %}
 )
+{% endif %}
 
 
-class {{ class_name }}Repository({% for op in operations %}{{ op | capitalize }}Op, {% endfor %}SQLRepositoryBase):
-    COLLECTION = "{{ collection_name }}"
-    ID_FIELD = "{{ id_field }}"
-    ID_FORMAT = "{{ id_field_format }}"
-    TABLE = {{ collection_name }}_table
+{{ repository_class(class_name, "SQLRepositoryBase", operations, generated_base, is_abstract, custom_operations) }}

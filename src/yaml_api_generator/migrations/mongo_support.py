@@ -41,9 +41,7 @@ from yaml_api_generator.server.common.loader import (
     ensure_spec_dir_importable,
     mongo_connection_params,
 )
-from yaml_api_generator.server.common.repositories.mongodb import (
-    unique_index_partial_filter,
-)
+from yaml_api_generator.runtime.mongo_lifecycle import MongoLifecycle
 
 from .errors import MigrationError
 
@@ -191,44 +189,50 @@ def _chain(revisions: list[Revision]) -> list[Revision]:
     return ordered
 
 
-def _desired_indexes(ir: IRDocument, datastore: str) -> list[tuple[str, str]]:
-    result: list[tuple[str, str]] = []
-    for name, collection in ir.collections.items():
-        if (collection.datastore or ir.default_datastore) != datastore:
-            continue
-        for field_name, cfg in collection.fields.items():
-            if isinstance(cfg, dict) and cfg.get("unique"):
-                result.append((name, field_name))
-    return result
+UniqueIndex = tuple[str, str, str | None]
+"""A unique index: its collection, its field, and the removal timestamp whose rows it leaves out."""
 
 
-def _known_indexes(revisions: list[Revision]) -> set[tuple[str, str]]:
-    known: set[tuple[str, str]] = set()
+def _desired_indexes(ir: IRDocument, datastore: str) -> list[UniqueIndex]:
+    return [
+        (name, field_name, collection.lifecycle.removal)
+        for name, collection in ir.collections.items()
+        if (collection.datastore or ir.default_datastore) == datastore
+        for field_name, cfg in collection.fields.items()
+        if isinstance(cfg, dict) and cfg.get("unique")
+    ]
+
+
+def _unique_index(op: dict[str, Any]) -> UniqueIndex:
+    return op.get("collection"), op.get("field"), op.get("removal")
+
+
+def _known_indexes(revisions: list[Revision]) -> set[UniqueIndex]:
+    known: set[UniqueIndex] = set()
     for revision in revisions:
         for op in revision.operations:
-            key = (op.get("collection"), op.get("field"))
             if op["op"] == "create_index":
-                known.add(key)
+                known.add(_unique_index(op))
             elif op["op"] == "drop_index":
-                known.discard(key)
+                known.discard(_unique_index(op))
     return known
+
+
+def _index_op(kind: str, index: UniqueIndex) -> dict[str, Any]:
+    coll, field, removal = index
+    return {"op": kind, "collection": coll, "field": field, "unique": True, **({"removal": removal} if removal else {})}
 
 
 def autogenerate(
     ir: IRDocument, datastore: str, revisions: list[Revision]
 ) -> list[dict[str, Any]]:
+    """Drops come first: an index whose removal timestamp changed is dropped before its replacement takes the name."""
     desired = _desired_indexes(ir, datastore)
     known = _known_indexes(revisions)
-    ops = [
-        {"op": "create_index", "collection": coll, "field": name, "unique": True}
-        for coll, name in desired
-        if (coll, name) not in known
+    return [
+        *(_index_op("drop_index", index) for index in sorted(known - set(desired), key=lambda index: index[:2])),
+        *(_index_op("create_index", index) for index in desired if index not in known),
     ]
-    ops += [
-        {"op": "drop_index", "collection": coll, "field": name, "unique": True}
-        for coll, name in sorted(known - set(desired))
-    ]
-    return ops
 
 
 def _write_revision(directory: Path, sequence: int, revision: Revision) -> Path:
@@ -254,7 +258,7 @@ async def _create_index(db: Any, op: dict[str, Any]) -> None:
     kwargs: dict[str, Any] = {"name": _index_name(op)}
     if op.get("unique"):
         kwargs["unique"] = True
-        kwargs["partialFilterExpression"] = unique_index_partial_filter(op["field"])
+        kwargs["partialFilterExpression"] = MongoLifecycle({"removal": op.get("removal")}).unique(op["field"])
     await db[op["collection"]].create_index(op["field"], **kwargs)
 
 
@@ -561,7 +565,7 @@ async def _schema_present(config: MongoMigrationConfig, db: Any) -> bool:
     existing = set(await db.list_collection_names())
     if not collections <= existing:
         return False
-    for coll, name in _desired_indexes(config.ir, config.datastore):
+    for coll, name, _ in _desired_indexes(config.ir, config.datastore):
         cursor = await db[coll].list_indexes()
         indexes = await cursor.to_list(length=None)
         if f"{name}_1" not in {index["name"] for index in indexes}:

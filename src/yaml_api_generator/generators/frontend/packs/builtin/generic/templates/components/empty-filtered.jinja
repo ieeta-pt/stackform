@@ -4,15 +4,15 @@ interface ActiveFilter {
 }
 
 interface EmptyFilteredProps {
-  activeFilters: ActiveFilter[];
-  onRemoveFilter: (key: string) => void;
-  onClearAll: () => void;
+  activeFilters?: ActiveFilter[];
+  onRemoveFilter?: (key: string) => void;
+  onClearAll?: () => void;
   onNewRecord?: () => void;
   entityLabel?: string;
 }
 
 export function EmptyFiltered({
-  activeFilters,
+  activeFilters = {{ props.filters.value | tojson }}.map((label) => ({ key: label, label })),
   onRemoveFilter,
   onClearAll,
   onNewRecord,
@@ -31,7 +31,7 @@ export function EmptyFiltered({
             >
               {f.label}
               <button
-                onClick={() => onRemoveFilter(f.key)}
+                onClick={() => onRemoveFilter?.(f.key)}
                 className="hover:text-wf-accent-ink leading-none"
                 aria-label={`Remove ${f.label} filter`}
               >
@@ -55,7 +55,7 @@ export function EmptyFiltered({
             <span className="font-title text-xl text-wf-ink-faint">⌕</span>
           </div>
           <h3 className="font-title text-xl text-wf-ink mb-1">No matching records</h3>
-          <p className="text-sm text-wf-ink-dim mb-6">Try removing a filter to broaden your search.</p>
+          <p className="text-sm text-wf-ink-dim mb-6">{{ props.message.value }}</p>
           <div className="flex items-center justify-center gap-2">
             <button onClick={onClearAll} className="wf-btn wf-btn-sm">
               Clear filters
@@ -71,3 +71,5 @@ export function EmptyFiltered({
     </div>
   );
 }
+
+export default EmptyFiltered;

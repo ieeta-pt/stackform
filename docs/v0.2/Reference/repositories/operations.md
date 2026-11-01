@@ -6,7 +6,7 @@ description: "How a repository selects its CRUD subset with crud:, and how custo
 A repository exposes two kinds of operations:
 
 - The six built-in CRUD operations, selected with the `crud:` list.
-- Custom operations under `operations:`, each backed by a MongoDB `query:` command or a `handler:` import path.
+- Custom operations under `operations:`, each backed by a `query:` (a MongoDB command or a SQL statement) or a `handler:` import path.
 
 ## Built-in CRUD operations
 
@@ -39,7 +39,7 @@ repositories:
     crud: [create, list, get, delete]   # no update -> no PATCH route, no Edit action
 ```
 
-Operation names must be among `list`, `get`, `create`, `update`, `replace`, `delete`. An unknown name is reported as `CRUD_OPERATION_INVALID`. A repository that sets `crud:` but declares no `entity:` is reported as `CRUD_WITHOUT_ENTITY`.
+Operation names must be among `list`, `get`, `create`, `update`, `replace`, `delete`. Any other name fails schema validation (`SCHEMA_VALIDATION_ERROR`). A repository that sets `crud:` but declares no `entity:` is reported as `CRUD_WITHOUT_ENTITY`.
 
 ## Disabling `replace` (or any op) globally
 
@@ -78,11 +78,11 @@ services:
 
 ## Custom operations
 
-Custom operations are declared under `repositories.<name>.operations`. Each entry needs either a `query:` (a MongoDB command) or a `handler:` (a dotted import path). An entry with neither is reported as `OPERATION_MISSING_QUERY_OR_HANDLER`.
+Custom operations are declared under `repositories.<name>.operations`. An operation name starts with a letter and contains only letters, digits and underscores; it becomes a method of the generated repository and service classes. Each entry declares exactly one of `query:` or `handler:` (a dotted import path); neither or both fails schema validation.
 
 ### Query-backed operations
 
-A `query:` runs a named MongoDB command against the repository's collection. The command must be one of the supported names, and most commands require a specific argument field:
+On a MongoDB datastore, a `query:` runs a named MongoDB command against the repository's collection. The command must be one of the supported names, and most commands require a specific argument field:
 
 ```yaml
 repositories:
@@ -93,7 +93,7 @@ repositories:
         query:
           command: find
           filter: { status: published }
-      count-all:
+      countAll:
         query:
           command: countDocuments
           filter: {}
@@ -110,34 +110,83 @@ Supported commands and their required field:
 | `requests`     | `bulkWrite` |
 | (none)         | `estimatedDocumentCount` |
 
+The other arguments are `update` (`updateOne`, `updateMany`, `findOneAndUpdate`), `replacement` (`replaceOne`, `findOneAndReplace`) and `key` (the field `distinct` returns).
+
 An unknown command is reported as `QUERY_COMMAND_UNKNOWN`; a missing required field as `QUERY_MISSING_FIELD`.
 
-By default the query targets the repository's entity collection. Override the target with `query.collection`:
+By default the query targets the repository's own collection. `query.collection` points it at another repository instead:
 
 ```yaml
 repositories:
   myCollection:
     entity: myEntity
     operations:
-      recent-related:
+      recentRelated:
         query:
           command: find
           filter: {}
-          collection: my-other-collection   # query a different collection
+          collection: myOtherCollection   # another repository
+  myOtherCollection:
+    entity: myOtherEntity
 ```
 
-A repository with no `entity:` can still declare query operations, but each query must then supply a `collection:`. Omitting both is reported as `QUERY_MISSING_COLLECTION`.
+`collection` must name a concrete repository; anything else is reported as `QUERY_COLLECTION_NOT_FOUND`. The query runs on that repository's datastore, and its form must suit that datastore (`QUERY_FORM_MISMATCH` otherwise). A repository with no `entity:` can still declare query operations, but each query must then supply a `collection:`. Omitting both is reported as `QUERY_MISSING_COLLECTION`.
+
+### SQL operations
+
+On a relational datastore, a `query:` is a `sql` statement with named parameters, bound from `params`:
+
+```yaml
+repositories:
+  events:
+    entity: event
+    operations:
+      byKind:
+        query:
+          sql: "SELECT * FROM events WHERE kind = :kind ORDER BY at DESC"
+          params: { kind: "$kind" }
+```
+
+A `sql` query on a MongoDB datastore, or a `command` query on a PostgreSQL datastore, is reported as `QUERY_FORM_MISMATCH`; an empty `sql` as `QUERY_SQL_INVALID`.
+
+### Request values
+
+A query value that is a string starting with `$` is replaced by a request value when the operation runs; every other value is used as written:
+
+| Reference | Value |
+|-----------|-------|
+| `$<name>` or `$params.<name>` | The route's path parameter (or service input) `<name>`. |
+| `$principal.sub` | The authenticated principal's subject. |
+| `$principal.identity_collection`, `$principal.roles`, `$principal.record.<field>` | The principal's identity, roles and stored record. |
+| `$body.<field>` | A field of the request body. |
+
+A reference that does not resolve becomes `null`.
+
+```yaml
+repositories:
+  posts:
+    entity: post
+    operations:
+      mine:
+        query:
+          command: find
+          filter: { ownerId: $principal.sub, status: $status }
+```
+
+### Lifecycle repositories
+
+On a repository with `softDelete` or `ttl`, query operations hide removed and expired rows of every collection or table they touch, and their writes reach visible rows only. `includeDeleted: true` makes an operation's reads see them as well. See [Record lifecycle](lifecycle.md#custom-operations).
 
 ### Handler-backed operations
 
-For logic that a single MongoDB command cannot express, point `handler:` at an async function. The generated repository imports it and calls it as `await handler(**kwargs)`, where the keyword arguments come from the caller:
+For logic that a query cannot express, point `handler:` at a plain or async function instead of declaring a `query:`. It receives the same request object as a service handler and returns the response body; see [Handler context](../services/handler-context.md):
 
 ```yaml
 repositories:
   myCollection:
     entity: myEntity
     operations:
-      archive-stale:
+      archiveStale:
         handler: my_app.archive_stale
 ```
 

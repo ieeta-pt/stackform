@@ -32,6 +32,7 @@ from .authorization import (
     UnauthorizedError,
     ValidateIdentityCreateStep,
 )
+from .handlers import HandlerStep
 from .jwks import JWKSStep
 from .login import LoginStep
 from .refresh import RefreshStep
@@ -45,9 +46,10 @@ from .repositories import (
     RepositoryUpdateStep,
 )
 from .services import ServiceInputStep
-from .validation import ValidateBodyStep
+from .validation import ConformDtoStep, ValidateBodyStep
 
 __all__ = [
+    "HandlerStep",
     "ServiceInputStep",
     "Step",
     "NotFoundError",
@@ -64,6 +66,7 @@ __all__ = [
     "JWKSStep",
     "LoginStep",
     "RefreshStep",
+    "ConformDtoStep",
     "ValidateBodyStep",
     "RepositoryListStep",
     "RepositoryGetStep",

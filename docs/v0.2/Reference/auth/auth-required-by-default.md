@@ -1,6 +1,6 @@
 ---
 title: "Authentication required by default"
-description: Once any auth entity exists, every non-public route requires a valid principal. Only access public opts out.
+description: Every route not declared access public requires a principal its access value admits.
 ---
 
 Once your spec contains any `type: auth` entity, the generated app protects every
@@ -10,16 +10,11 @@ you to mark routes public, not to mark them protected.
 
 ## The rule
 
-A route is protected (requires a valid principal) when both are true:
-
-- The route is not declared `access: public`.
-- An identity collection exists in the spec (at least one `type: auth` entity).
-
-Internally the generated app computes this as `needs_auth = not is_public and
-has_identity`. The second half matters: with no auth entity in the spec, there is
-nothing to authenticate against, so even a non-public route stays open. Add a single
-`type: auth` entity and every route that is not `access: public` immediately starts
-requiring credentials.
+Every route not declared `access: public` requires a principal that satisfies its
+access value. A request without valid credentials gets 401, and an authenticated
+request the access value does not admit gets 403. A spec with no `type: auth`
+entity has no way to authenticate, so its non-public routes answer every request
+with 401: give such routes `access: public`, or add an auth entity.
 
 ```yaml
 version: "0.2"
@@ -44,9 +39,9 @@ entities:
       title: { type: string, required: true }
 ```
 
-With the `myEntity` entity present, `GET /api/v1/my-collection` now returns 401
-unless the caller presents valid credentials. Remove the `myEntity` entity and the
-same route is open to anyone.
+The repository, service and controller of `myCollection` are left out above; once
+its controller sets `access: "*"`, `GET /api/v1/my-collection` returns 401 unless
+the caller presents valid credentials.
 
 ## Effective access resolution
 
@@ -69,8 +64,8 @@ flowchart TD
   P3 -- "yes, role match" --> OK
 ```
 
-The default FastAPI build, the DRF build, and `stackform run` all follow this same
-resolution. A request with no credentials on a protected route stops at the "401
+`stackform run` and every generated backend (FastAPI, DRF, raw ASGI) follow this
+same resolution. A request with no credentials on a protected route stops at the "401
 if no principal" node; an authenticated request that does not satisfy the role or
 `<entity>:*` scope gets 403.
 
@@ -84,55 +79,55 @@ vocabulary:
 | `public` | No authentication. The only way to opt a route out of protection. |
 | `"*"` | Any valid principal from any auth entity. |
 | `<entity>:*` | Any principal whose identity collection is `<entity>` -- any member of that auth entity. |
-| `<entity>:<role>` | A principal of `<entity>` whose role (exact match) is `<role>`. |
+| `<entity>:<role>` | A principal of `<entity>` holding `<role>`, directly or through the role hierarchy. |
 | `<role>` | Bare role; allowed only when a single auth entity exists (otherwise `ACCESS_AMBIGUOUS_ROLE`). |
 
-Roles come from the entity's enum field named by `auth.roles: <enumFieldName>` (with
-fallback to a `roles` or `role` field). The standalone entity-level `roles:` block is
-not wired in v0.2. See [Roles overview](../roles/overview.md).
+Roles come from the entity-level `roles:` block (managed roles) or from the enum
+field named by `auth.roles`. See [Roles overview](../roles/overview.md).
 
-## Minified controller default
+## Controllers without `access:`
 
-A controller written in its minified form (just a repository reference, no explicit
-`access:`) defaults to `access: public`. This is the most common way a route is
-left open by accident.
-
-```yaml
-controllers:
-  myCollection: myCollection        # minified -> access defaults to public
-```
-
-If you want `myCollection` protected, declare the access explicitly:
+A controller that declares no `access:` defaults to `access: public`, so every
+route it generates is open. This is the most common way a route is left open by
+accident.
 
 ```yaml
 controllers:
   myCollection:
-    repository: myCollection
+    service: myCollection        # no access -> every route is public
+    base_path: /my-collection
+```
+
+Declare the access explicitly to protect it:
+
+```yaml
+controllers:
+  myCollection:
+    service: myCollection
+    base_path: /my-collection
     access: "*"
 ```
 
-You can also tighten or loosen individual operations:
+Individual operations tighten or loosen the controller default:
 
 ```yaml
 controllers:
   myCollection:
-    repository: myCollection
+    service: myCollection
+    base_path: /my-collection
     access: "*"
     operations:
       list: { access: public }      # reads open, writes protected
-      delete: { access: user:admin }
+      delete: { access: myEntity:admin }
 ```
 
-> **Enforcement status**
+> **Enforcement**
 >
-> Roles (exact match), `<entity>:*` scoping, and ownership/ABAC `when` rules
+> Roles, role hierarchies, `<entity>:*` scoping, and ownership/ABAC `when` rules
 > are enforced by the generated FastAPI backend, the generated DRF backend, and the
-> `stackform run` dev server alike. A request that fails a rule gets 401 (missing or
-> invalid credentials), 403 (authenticated but not allowed), or 404 (record not
-> found, checked before ownership). Two current limitations: role hierarchy (for
-> example `admin` inheriting `moderator`) is accepted in YAML but not yet applied
-> during enforcement -- only exact role matches are checked; and conditional or
-> ownership rules require a v0.2 spec, because v0.1 specs do not parse `when` rules.
+> `stackform run` dev server alike. A request that no rule admits gets 401 when it
+> carries no valid credentials and 403 otherwise; a missing record answers 404
+> before ownership is checked.
 
 ## See Also
 

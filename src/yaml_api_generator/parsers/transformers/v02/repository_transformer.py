@@ -3,16 +3,44 @@
 Validates CRUD operations, query commands, and operation definitions.
 """
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import asdict
 from typing import Any
 
-from yaml_api_generator.ir import CRUD_OPERATIONS, IROperation, IRRepository
+from yaml_api_generator.ir import CRUD_OPERATIONS, IRCollection, IROperation, IRRepository
 from yaml_api_generator.parsers.yaml_parser import ConfigError
+from yaml_api_generator.runtime.lifecycle import Lifecycle
+from yaml_api_generator.runtime.mongo_operations import with_identity
 from .datastore_transformer import resolve_binding
 
 
 def _identity_handler(handler: str | None) -> str | None:
     return handler
+
+
+def _targeted(query: Any, collections: Mapping[str, IRCollection]) -> Any:
+    """A query naming a collection inserts with that collection's ids and keeps to its lifecycle.
+
+    An undeclared collection assigns no ids and has no lifecycle.
+    """
+    if not isinstance(query, dict) or "collection" not in query:
+        return query
+    target = collections.get(query["collection"])
+    if target is None:
+        return {**query, "identity": None, "lifecycle": {}}
+    return {"lifecycle": asdict(target.lifecycle), **with_identity(query, target.idField, target.idFormat)}
+
+
+def _joining(query: Any, collections: Mapping[str, IRCollection]) -> Any:
+    """A pipeline or SQL statement reads every other collection it names within that collection's lifecycle."""
+    if not isinstance(query, dict) or not ("sql" in query or query.get("command") == "aggregate"):
+        return query
+    lifecycles = {name: asdict(c.lifecycle) for name, c in collections.items() if c.lifecycle != Lifecycle()}
+    return {**query, "lifecycles": lifecycles}
+
+
+def _including_deleted(query: Any, include_deleted: bool) -> Any:
+    return {**query, "includeDeleted": True} if include_deleted and isinstance(query, dict) else query
 
 
 class RepositoryTransformer:
@@ -53,6 +81,7 @@ class RepositoryTransformer:
         datastore_types: dict[str, str] | None = None,
         handler_resolver: Callable[[str | None], str | None] = _identity_handler,
         file_datastore_names: Collection[str] = frozenset(),
+        collections: Mapping[str, IRCollection] | None = None,
     ) -> tuple[dict[str, IRRepository], list[ConfigError]]:
         """Transform repository configurations to IR.
 
@@ -84,7 +113,7 @@ class RepositoryTransformer:
                 if binding_error is not None:
                     errors.append(binding_error)
 
-            if crud_raw is not None and entity is None:
+            if crud_raw is not None and entity is None and not abstract:
                 errors.append(ConfigError(
                     code="CRUD_WITHOUT_ENTITY",
                     message=f"Repository '{repo_name}' specifies 'crud' but has no 'entity'",
@@ -111,22 +140,16 @@ class RepositoryTransformer:
                 query = op_cfg.get("query")
                 handler = op_cfg.get("handler")
 
-                if query is None and handler is None:
-                    errors.append(ConfigError(
-                        code="OPERATION_MISSING_QUERY_OR_HANDLER",
-                        message=f"Operation '{op_name}' in repository '{repo_name}' must have 'query' or 'handler'",
-                        path=f"repositories.{repo_name}.operations.{op_name}",
-                    ))
-                    continue
-
                 if query is not None:
-                    ds_type = (datastore_types or {}).get(datastore)
+                    target = (collections or {}).get(query.get("collection"))
+                    queried = getattr(target, "datastore", None) or datastore
+                    ds_type = (datastore_types or {}).get(queried)
                     op_path = f"repositories.{repo_name}.operations.{op_name}.query"
                     if "sql" in query:
                         if ds_type in ("mongodb", "mongo"):
                             errors.append(ConfigError(
                                 code="QUERY_FORM_MISMATCH",
-                                message=f"Operation '{op_name}' uses a SQL query but datastore '{datastore}' is MongoDB",
+                                message=f"Operation '{op_name}' uses a SQL query but datastore '{queried}' is MongoDB",
                                 path=f"{op_path}.sql",
                             ))
                         elif not isinstance(query.get("sql"), str) or not query["sql"].strip():
@@ -138,7 +161,7 @@ class RepositoryTransformer:
                     elif ds_type in ("postgres", "postgresql"):
                         errors.append(ConfigError(
                             code="QUERY_FORM_MISMATCH",
-                            message=f"Operation '{op_name}' uses a MongoDB command but datastore '{datastore}' is relational; use 'sql'",
+                            message=f"Operation '{op_name}' uses a MongoDB command but datastore '{queried}' is relational; use 'sql'",
                             path=f"{op_path}.command",
                         ))
                     else:
@@ -165,7 +188,12 @@ class RepositoryTransformer:
                                 ))
 
                 ops_dict[op_name] = IROperation(
-                    name=op_name, query=query, handler=handler_resolver(handler)
+                    name=op_name,
+                    query=_including_deleted(
+                        _joining(_targeted(query, collections or {}), collections or {}),
+                        op_cfg.get("includeDeleted", False),
+                    ),
+                    handler=handler_resolver(handler),
                 )
 
             if entity is None and not ops_dict and not abstract:

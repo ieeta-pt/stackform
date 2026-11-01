@@ -6,6 +6,7 @@ user experience across all CLI commands.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -35,45 +36,36 @@ class Colors:
             self.white = "\033[37m"
 
 
+_PATH_SEGMENT = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+
+
 def _find_line_number(yaml_file: str, path: str) -> int | None:
-    """Find approximate line number for a YAML path.
-
-    Args:
-        yaml_file: Path to YAML file
-        path: Dotted path like "entities.users.fields.email"
-
-    Returns:
-        Line number (1-indexed) or None if not found
-    """
+    """The 1-indexed line of the deepest key of a dotted path like ``controllers.items.access[0]``."""
     try:
-        with open(yaml_file, 'r') as f:
-            content = f.read()
-
-        parts = path.split('.')
-        if not parts:
-            return None
-
-        lines = content.split('\n')
-        current_indent = 0
-
-        for i, part in enumerate(parts):
-            for line_num, line in enumerate(lines, 1):
-                stripped = line.lstrip()
-                if not stripped or stripped.startswith('#'):
-                    continue
-
-                line_indent = len(line) - len(stripped)
-
-                if i == 0 or line_indent >= current_indent:
-                    if stripped.startswith(f"{part}:"):
-                        if i == len(parts) - 1:
-                            return line_num
-                        current_indent = line_indent + 2
-                        break
-
+        node = yaml.compose(Path(yaml_file).read_text())
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return None
-    except (OSError, UnicodeDecodeError):
-        return None
+    line = None
+    for key, index in _PATH_SEGMENT.findall(path):
+        located = _child(node, key, index)
+        if located is None:
+            break
+        mark, node = located
+        line = mark.line + 1
+    return line
+
+
+def _child(node: yaml.Node | None, key: str, index: str) -> tuple[yaml.Mark, yaml.Node] | None:
+    """The mark naming a mapping key or sequence item, and the node it holds."""
+    if index and isinstance(node, yaml.SequenceNode) and int(index) < len(node.value):
+        item = node.value[int(index)]
+        return item.start_mark, item
+    if key and isinstance(node, yaml.MappingNode):
+        return next(
+            ((name.start_mark, value) for name, value in node.value if name.value == key),
+            None,
+        )
+    return None
 
 
 def _line_from_location(location: str) -> int | None:

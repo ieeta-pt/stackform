@@ -135,7 +135,7 @@ Every key a `version: "0.2"` spec accepts. `<name>` stands for a name you choose
 | `repositories.<name>.operations.<name>.query.requests` | any | [repositories/operations](repositories/operations.md#custom-operations) |
 | `repositories.<name>.operations.<name>.query.params` | map | [repositories/operations](repositories/operations.md#custom-operations) |
 | `repositories.<name>.operations.<name>.handler` | string | [repositories/operations](repositories/operations.md#custom-operations) |
-| `repositories.<name>.operations.<name>.includeDeleted` | boolean | [repositories/lifecycle](repositories/lifecycle.md#includedeleted) |
+| `repositories.<name>.operations.<name>.includeDeleted` | boolean, with `query` only | [repositories/lifecycle](repositories/lifecycle.md#includedeleted) |
 
 ## Services
 

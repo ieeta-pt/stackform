@@ -21,6 +21,7 @@ entities:
       createdAt: { type: datetime }
   post:
     extends: base
+    abstract: false
     fields:
       title: { type: string, required: true }
 repositories:

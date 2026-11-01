@@ -1,0 +1,119 @@
+version: "0.3"
+api:
+  basePath: /api
+  port: 8081
+  securityHeaders: false
+  cors:
+    origins: ["https://app.example.com"]
+imports:
+  vendor: { path: ./grammar_vendor, package: grammar_vendor, requires: ["httpx>=0.27"] }
+providers:
+  corporate:
+    type: oidc
+    trust: idp
+    client_id: app
+    discovery_url: https://idp.example.com/.well-known/openid-configuration
+    issuer: https://idp.example.com
+    audiences: [app, api]
+datastores:
+  main:
+    type: mongodb
+    uri: mongodb://localhost:27017
+    database: grammar
+    default: true
+deploy:
+  runtime: docker
+policies:
+  isAuthor:
+    given: { user: identity:user }
+    params: [target]
+    when: "target.authorId equals user.sub"
+dto:
+  draft:
+    fields:
+      title: { type: string, required: true, minLength: 1, maxLength: 80 }
+entities:
+  user:
+    type: auth
+    auth: { identifier: email, via: [corporate] }
+    fields:
+      id: { type: id }
+      email: { type: string, required: true, unique: true }
+  record:
+    abstract: true
+    fields:
+      createdAt: { type: datetime }
+  post:
+    extends: record
+    abstract: false
+    pk: slug
+    fields:
+      slug: { type: string, required: true }
+      title: { type: string, required: true, minLength: 1, maxLength: 80 }
+      score: { type: number, min: 0, max: 5 }
+      authorId: { type: ref, ref: user }
+      deletedAt: { type: datetime }
+      expiresAt: { type: datetime }
+      meta:
+        type: object
+        additionalProperties: false
+        properties:
+          lang: { type: string }
+repositories:
+  users:
+    entity: user
+  lifecycle:
+    abstract: true
+    softDelete: deletedAt
+    ttl: { field: expiresAt, seconds: 3600 }
+  posts:
+    extends: lifecycle
+    entity: post
+    datastore: main
+services:
+  users:
+    repository: users
+  base:
+    abstract: true
+    repository: posts
+  posts:
+    extends: base
+    operations:
+      replace: false
+      publish: { handler: vendor.publish }
+controllers:
+  users:
+    service: users
+    base_path: /users
+  posts:
+    service: posts
+    base_path: /posts
+    access:
+      - given: { principal: identity:user }
+    operations:
+      update: { method: PUT, path: "/{slug}/edit" }
+      publish: { method: POST, path: "/{slug}/publish" }
+    routes:
+      list:
+        pagination: { strategy: offset, size: { default: 10, max: 50 } }
+      get:
+        access:
+          - given: { principal: identity:user }
+            when: "policy:isAuthor(posts)"
+            reason: Only the author may read a post.
+  drafts:
+    base_path: /drafts
+    routes:
+      list:
+        service: posts
+        method: GET
+        path: ""
+        access:
+          - given: { principal: identity:user }
+        pagination: { strategy: offset, size: { default: 5, max: 20 } }
+      create:
+        service: posts
+        method: POST
+        path: ""
+        access:
+          - given: { principal: identity:user, req: "request:draft" }

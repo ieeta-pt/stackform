@@ -1,0 +1,58 @@
+version: "0.1"
+api:
+  basePath: /api
+  version: v1
+  pagination:
+    defaultPageSize: 10
+    maxPageSize: 50
+security:
+  cors:
+    allowedOrigins: ["https://app.example.com"]
+    allowCredentials: true
+    allowedMethods: [GET, POST]
+  headers:
+    enableStandard: false
+providers:
+  corporate:
+    type: oidc
+    client_id: app
+    client_secret: secret
+mongo:
+  uri: mongodb://localhost:27017
+  database: grammar
+collections:
+  users:
+    type: auth
+    auth: { identifier: email, via: [password, corporate] }
+    roles:
+      values: [admin, editor, viewer]
+      default: viewer
+      hierarchy:
+        admin: [editor]
+        editor: [viewer]
+    access: { list: "*", create: public }
+    fields:
+      id: { type: id, format: uuidv4 }
+      email: { type: string, required: true, unique: true, maxLength: 120 }
+  posts:
+    softDelete: true
+    operations: { replace: false }
+    access:
+      list: public
+      get: public
+      create: "users:editor"
+      update:
+        - principal: "users:*"
+          when: "principal.sub equals document.authorId"
+          reason: Only the author may edit a post.
+      delete: "users:admin"
+    fields:
+      id: { type: id }
+      title: { type: string, required: true }
+      authorId: { type: ref, ref: users }
+      score: { type: number, min: 0, max: 5 }
+      meta:
+        type: object
+        additionalProperties: false
+        properties:
+          lang: { type: string }

@@ -1,0 +1,26 @@
+version: "0.3"
+api:
+  basePath: /api
+datastores:
+  main:
+    type: postgres
+    dsn: postgresql+asyncpg://postgres:postgres@localhost:5432/grammar
+deploy:
+  runtime: systemd
+  name: grammar
+entities:
+  note:
+    fields:
+      id: { type: id }
+      title: { type: string, required: true }
+repositories:
+  notes:
+    entity: note
+services:
+  notes:
+    repository: notes
+controllers:
+  notes:
+    service: notes
+    base_path: /notes
+    access: public

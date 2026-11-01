@@ -46,7 +46,7 @@ SCHEMA_REGISTRY: Registry = Registry().with_resources(
     for path in SCHEMA_DIR.glob("*.schema.json")
 )
 
-__all__ = ["ConfigError", "ConfigErrors", "ParseResult", "load_and_generate_ir"]
+__all__ = ["ConfigError", "ConfigErrors", "ParseResult", "generate_ir", "load_and_generate_ir"]
 
 
 @dataclass(frozen=True)
@@ -215,9 +215,13 @@ def load_and_generate_ir(
     yaml_file: str | Path, schema_file: str | Path | None = None
 ) -> ParseResult:
     yaml_path = Path(yaml_file)
+    return generate_ir(_load_spec(yaml_path), yaml_path.parent, schema_file)
 
-    raw_config = _load_spec(yaml_path)
 
+def generate_ir(
+    raw_config: dict[str, Any], base_dir: Path, schema_file: str | Path | None = None
+) -> ParseResult:
+    """Validate a loaded spec whose relative paths start at ``base_dir`` and build its IR."""
     interpolation_errors: list[ConfigError] = []
     resolved = _resolve_interpolation(raw_config, tuple(), interpolation_errors)
     if interpolation_errors:
@@ -316,7 +320,7 @@ def load_and_generate_ir(
     from .transformers.registry import transform_config
 
     return ParseResult(
-        ir=transform_config(resolved, yaml_path.parent),
+        ir=transform_config(resolved, base_dir),
         ui_block=ui_block,
         warnings=trust_warnings + access_warnings,
     )

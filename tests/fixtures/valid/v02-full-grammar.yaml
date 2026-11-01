@@ -1,0 +1,82 @@
+version: "0.2"
+api:
+  basePath: /api
+  version: v1
+  securityHeaders: false
+mongo:
+  uri: mongodb://localhost:27017
+  database: grammar
+deploy:
+  runtime: docker
+  include: ["static/**"]
+  mongo: { local: false }
+  services:
+    cache:
+      image: redis:7
+      command: ["redis-server", "--save", ""]
+      environment: { REDIS_PORT: "6379" }
+      ports: ["6379:6379"]
+      volumes: ["cache:/data"]
+    worker:
+      build: { context: ./worker, dockerfile: Dockerfile, args: { MODE: batch } }
+      depends_on: { cache: { condition: service_started } }
+policies:
+  isAuthor:
+    given: { user: identity:user }
+    params: [target]
+    when: "target.authorId equals user.sub"
+entities:
+  user:
+    type: auth
+    auth: { identifier: email, via: [password] }
+    fields:
+      id: { type: id }
+      email: { type: string, required: true, unique: true }
+  post:
+    fields:
+      id: { type: id }
+      title: { type: string, required: true }
+      authorId: { type: string, readonly: true }
+      deletedAt: { type: datetime }
+      expiresAt: { type: datetime }
+      meta:
+        type: object
+        additionalProperties: false
+        properties:
+          lang: { type: string }
+repositories:
+  users:
+    entity: user
+  posts:
+    entity: post
+    softDelete: deletedAt
+    ttl: { field: expiresAt, seconds: 3600 }
+    operations:
+      archived:
+        query: { command: find, collection: posts, filter: {} }
+        includeDeleted: true
+      publish:
+        handler: handlers.posts:publish
+services:
+  users:
+    repository: users
+  base:
+    abstract: true
+    repository: posts
+  posts:
+    extends: base
+controllers:
+  users:
+    service: users
+    base_path: /users
+  posts:
+    service: posts
+    base_path: /posts
+    access:
+      - given: { principal: identity:user }
+    routes:
+      get:
+        access:
+          - given: { principal: identity:user }
+            when: "policy:isAuthor(posts)"
+            reason: Only the author may read a post.

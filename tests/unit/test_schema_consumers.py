@@ -1,118 +1,153 @@
-"""Every key a spec schema accepts is read by some consumer: parser, generator or UI pack, and every prop a
-pack component declares is read by the UI.
+"""Every key location a spec schema declares is consumed, and every prop a pack component declares is read by
+the UI.
 
-A key counts as consumed when it occurs as an identifier or a string literal in the
-package's Python code, or anywhere in its Jinja templates. Docstrings and dict
-display keys do not count: the latter write a key, as schema builders do, rather
-than read one.
+A location is consumed when a valid spec among the examples and fixtures uses it and some change
+of its value that the schema still accepts changes what the consumers receive: the IR the dev
+server and every generated backend are built from, the UI generator context, or a rejection by a
+check past the schema. A value the schema pins, such as a branch discriminator, admits no change
+to observe; the schema reading it to pick the branch is its consumer.
 """
 
-import ast
-import json
 import re
 from collections.abc import Iterator
-from functools import cache
+from copy import deepcopy
+from dataclasses import dataclass
+from functools import cache, cached_property
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from tests.unit.support.schema_locations import Node, declared
 from yaml_api_generator.generators.frontend.packs.loader import load_pack
 from yaml_api_generator.generators.frontend.renderer import CRUD_PAGES
+from yaml_api_generator.parsers.template_loader import Manifest
+from yaml_api_generator.parsers.ui_parser import build_generator_context
+from yaml_api_generator.parsers.yaml_parser import (
+    SPEC_SCHEMAS,
+    ParseResult,
+    generate_ir,
+)
 
-PACKAGE = Path(__file__).parents[2] / "src" / "yaml_api_generator"
-SCHEMAS = PACKAGE / "parsers" / "schemas"
-
-# Accepted by the schema but read by no consumer yet.
-UNENFORCED: dict[str, str] = {}
-
-# Read by an external tool from a block the generator copies verbatim.
-VERBATIM = {
-    "dockerfile": "deploy.services.<name>.build, rendered into docker-compose",
-}
-
-
-def _schema_keys(node, location: str = "") -> Iterator[tuple[str, str]]:
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "properties" and isinstance(value, dict):
-                for name, sub in value.items():
-                    yield name, f"{location}.{name}"
-                    yield from _schema_keys(sub, f"{location}.{name}")
-            else:
-                yield from _schema_keys(value, location)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _schema_keys(item, location)
+ROOT = Path(__file__).parents[2]
+SCHEMA_FILES = (*SPEC_SCHEMAS.values(), "ui.schema.json")
+DELETED = object()
 
 
-def _docstring_ids(tree: ast.Module) -> set[int]:
-    scopes = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-    return {
-        id(node.body[0].value)
-        for node in ast.walk(tree)
-        if isinstance(node, scopes)
-        and node.body
-        and isinstance(node.body[0], ast.Expr)
-        and isinstance(node.body[0].value, ast.Constant)
-    }
+def received(result: ParseResult) -> tuple[Any, ...]:
+    """What the consumers receive from a spec: the IR, and for a UI block the generator context and the
+    ``frontend`` target the command line reads."""
+    if result.ui_block is None:
+        return (result.ir,)
+    frontend = result.ui_block["frontend"]
+    return result.ir, frontend, build_generator_context(result.ir, result.ui_block, load_pack(frontend["pack"]).manifest)
 
 
-def _written_key_ids(tree: ast.Module) -> set[int]:
-    return {id(key) for node in ast.walk(tree) if isinstance(node, ast.Dict) for key in node.keys if key is not None}
+def changed(config: Any, value_path: tuple, value: Any) -> Any:
+    """A copy of ``config`` with ``value`` at ``value_path``, or without that key when ``value`` is ``DELETED``."""
+    config = deepcopy(config)
+    *parents, key = value_path
+    container = config
+    for step in parents:
+        container = container[step]
+    if value is DELETED:
+        del container[key]
+    else:
+        container[key] = value
+    return config
 
 
-def _python_words(source: str) -> Iterator[str]:
-    tree = ast.parse(source)
-    unread = _docstring_ids(tree) | _written_key_ids(tree)
-    for node in ast.walk(tree):
-        match node:
-            case ast.Constant(value=str(text)) if id(node) not in unread:
-                yield text
-            case ast.Name(id=word) | ast.Attribute(attr=word) | ast.arg(arg=word) | ast.alias(name=word):
-                yield word
-            case ast.keyword(arg=str(word)) | ast.FunctionDef(name=word) | ast.ClassDef(name=word):
-                yield word
+def variants(location: Node, value: Any) -> Iterator[Any]:
+    """Changes of ``value`` worth trying: dropping it, another value its schema allows, or a nearby one."""
+    yield DELETED
+    yield from (other for node in location.applicable(value) for other in node.schema.get("enum", ()) if other != value)
+    match value:
+        case bool():
+            yield not value
+        case int() | float():
+            yield value + 1
+        case str():
+            yield f"{value}x"
+        case list():
+            yield from (changed(value, (index,), DELETED) for index in range(len(value)))
+        case dict():
+            yield from (changed(value, (key,), DELETED) for key in value)
 
 
-@cache
-def _corpus() -> str:
-    return "\n".join(
-        [
-            *(word for path in PACKAGE.rglob("*.py") for word in _python_words(path.read_text())),
-            *(path.read_text() for path in PACKAGE.rglob("*.jinja")),
+@dataclass(frozen=True)
+class Spec:
+    """An example or fixture spec, as loaded."""
+
+    path: Path
+
+    def __str__(self) -> str:
+        return str(self.path.relative_to(ROOT))
+
+    @cached_property
+    def config(self) -> dict[str, Any]:
+        return Manifest.discover(self.path).load()
+
+    @cached_property
+    def schema(self) -> Node:
+        return Node(SPEC_SCHEMAS.get(str(self.config.get("version", "0.1")), SPEC_SCHEMAS["0.1"]))
+
+    def outcome(self, config: dict[str, Any]) -> object:
+        try:
+            return received(generate_ir(deepcopy(config), self.path.parent))
+        except Exception as exc:  # noqa: BLE001 - a consumer refusing the change still read the key
+            return type(exc), str(exc)
+
+    @cached_property
+    def baseline(self) -> object:
+        return self.outcome(self.config)
+
+    def uses(self) -> Iterator[tuple[Node, tuple]]:
+        return self.schema.uses(self.config)
+
+    def consumes(self, location: Node, value_path: tuple) -> bool:
+        value = self.config
+        for step in value_path:
+            value = value[step]
+        accepted = [
+            config
+            for config in (changed(self.config, value_path, variant) for variant in variants(location, value))
+            if self.schema.holds(config)
         ]
-    )
+        return not accepted or any(self.outcome(config) != self.baseline for config in accepted)
 
 
 @cache
-def _locations() -> dict[str, tuple[str, ...]]:
-    found: dict[str, list[str]] = {}
-    for path in sorted(SCHEMAS.glob("*.schema.json")):
-        for key, location in _schema_keys(json.loads(path.read_text())):
-            found.setdefault(key, []).append(f"{path.name}{location}")
-    return {key: tuple(locations) for key, locations in found.items()}
+def corpus() -> tuple[Spec, ...]:
+    """Every example and fixture spec the parser accepts."""
+    specs = (
+        Spec(path)
+        for pattern in ("examples/**/*.yaml", "tests/fixtures/**/*.yaml")
+        for path in sorted(ROOT.glob(pattern))
+        if "invalid" not in path.parts
+    )
+    return tuple(spec for spec in specs if spec.schema.holds(spec.config) and isinstance(spec.baseline, tuple))
 
 
-def _consumed(key: str) -> bool:
-    return re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", _corpus()) is not None
+@cache
+def uses() -> dict[Node, list[tuple[Spec, tuple]]]:
+    """Each location the corpus uses, with every spec and value path using it."""
+    found: dict[Node, list[tuple[Spec, tuple]]] = {}
+    for spec in corpus():
+        for location, value_path in spec.uses():
+            found.setdefault(location, []).append((spec, value_path))
+    return found
 
 
-EXEMPT = UNENFORCED | VERBATIM
+LOCATIONS = sorted({location for file in SCHEMA_FILES for location in declared(file)}, key=str)
 
 
-def test_every_schema_key_has_a_consumer():
-    orphans = {
-        key: locations[:3]
-        for key, locations in _locations().items()
-        if key not in EXEMPT and not _consumed(key)
-    }
-    assert orphans == {}
-
-
-@pytest.mark.parametrize("key", sorted(EXEMPT))
-def test_exempt_key_is_still_an_unconsumed_schema_key(key):
-    assert key in _locations()
-    assert key in VERBATIM or not _consumed(key)
+@pytest.mark.parametrize("location", LOCATIONS, ids=str)
+def test_every_schema_location_has_a_consumer(location):
+    found = uses().get(location)
+    assert found, f"no example or fixture uses {location}"
+    assert any(spec.consumes(location, value_path) for spec, value_path in found), (
+        f"no change of {location} reaches a consumer in " + ", ".join(sorted({str(spec) for spec, _ in found}))
+    )
 
 
 GENERIC = load_pack("generic")
@@ -166,9 +201,9 @@ def _reads(component: str, prop: str, kind: str | None) -> bool:
 
 
 def _pack_props() -> Iterator[tuple[str, str, str | None]]:
-    for component, declared in COMPONENTS.items():
+    for component, component_spec in COMPONENTS.items():
         if component not in TEMPLATELESS:
-            for prop, spec in (declared.get("props") or {}).items():
+            for prop, spec in (component_spec.get("props") or {}).items():
                 yield component, prop, spec.get("type")
 
 

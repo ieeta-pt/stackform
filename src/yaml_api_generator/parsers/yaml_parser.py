@@ -23,7 +23,10 @@ import json
 import os
 import re
 from collections.abc import Iterator
+from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import reduce
+from operator import getitem
 from pathlib import Path
 from typing import Any
 
@@ -157,7 +160,7 @@ def _load_schema(schema_file: Path) -> dict[str, Any]:
 def validate_schema(config: Any, schema: dict[str, Any]) -> list[ConfigError]:
     validator = Draft202012Validator(schema, registry=SCHEMA_REGISTRY)
     errors = sorted(
-        validator.iter_errors(config),
+        _schema_errors(validator, config),
         key=lambda item: (item.json_path, item.message),
     )
     return [
@@ -167,6 +170,41 @@ def validate_schema(config: Any, schema: dict[str, Any]) -> list[ConfigError]:
             path=join_path(tuple(str(part) for part in error.path)),
         )
         for error in errors
+    ]
+
+
+def _schema_errors(validator: Draft202012Validator, config: Any) -> Iterator[ValidationError]:
+    """The errors of ``config``, where an unevaluated key is one whose own value is valid.
+
+    A key whose value fails its subschema loses the annotation that marks it evaluated, so the
+    ``unevaluatedProperties`` around it flags the key again; that error is reported by the value.
+    """
+    errors = list(validator.iter_errors(config))
+    for error in errors:
+        failing = (
+            {key for key in error.instance if any(_within(other, (*error.absolute_path, key)) for other in errors)}
+            if error.validator == "unevaluatedProperties"
+            else set()
+        )
+        yield from _unevaluated(validator, config, tuple(error.absolute_path), failing) if failing else (error,)
+
+
+def _within(error: ValidationError, path: tuple[Any, ...]) -> bool:
+    return tuple(error.absolute_path)[: len(path)] == path
+
+
+def _unevaluated(
+    validator: Draft202012Validator, config: Any, path: tuple[Any, ...], failing: set[str]
+) -> list[ValidationError]:
+    """The ``unevaluatedProperties`` errors at ``path`` once its ``failing`` keys are gone."""
+    pruned = deepcopy(config)
+    target = reduce(getitem, path, pruned)
+    for key in failing:
+        del target[key]
+    return [
+        error
+        for error in validator.iter_errors(pruned)
+        if error.validator == "unevaluatedProperties" and tuple(error.absolute_path) == path
     ]
 
 

@@ -191,6 +191,28 @@ def test_mongo_block_beside_file_datastores_accepted(tmp_path):
     assert load_and_generate_ir(str(path)).ir.mongo.database == "blog"
 
 
+META = ("entities", "post", "fields", "meta")
+NESTED_TYPO = {"type": "object", "properties": {"lang": {"type": "string", "maxLenght": 3}}}
+TYPO_ERROR = ("entities.post.fields.meta.properties.lang", "Unevaluated properties are not allowed ('maxLenght' was unexpected)")
+
+
+@pytest.mark.parametrize("version", ["0.2", "0.3"])
+@pytest.mark.parametrize(
+    ("meta", "expected"),
+    [
+        (NESTED_TYPO, [TYPO_ERROR]),
+        (
+            {**NESTED_TYPO, "lenght": 3},
+            [("entities.post.fields.meta", "Unevaluated properties are not allowed ('lenght' was unexpected)"), TYPO_ERROR],
+        ),
+    ],
+    ids=["nested-typo", "nested-and-own-typo"],
+)
+def test_nested_error_is_reported_only_where_it_lies(tmp_path, version, meta, expected):
+    spec = _set_path(copy.deepcopy(BASE_SPECS[version]), META, meta)
+    assert [(error.path, error.message) for error in _load_errors(tmp_path, spec)] == expected
+
+
 @pytest.mark.parametrize("spec,path", WRONG_SHAPES.values(), ids=list(WRONG_SHAPES))
 def test_wrong_container_shape_reports_schema_error(tmp_path, spec, path):
     errors = _load_errors(tmp_path, {"version": "0.2", **spec})

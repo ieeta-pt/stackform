@@ -298,8 +298,14 @@ def admit_rows(ctx: RequestContext, decisions: list[Decision]) -> None:
 
 
 def screen_record(ctx: RequestContext, decisions: list[Decision]) -> None:
-    """Routes that load a record: refuse early when no record could be admitted."""
-    row_filter(decisions)
+    """Routes that load a record: decide early only when the deciding rule does not depend on it.
+
+    That rule is the first one that may hold for some record; when it holds for every record,
+    or no rule may hold, the record cannot change the outcome or its reason.
+    """
+    deciding = next((decision.predicate for decision in decisions if decision.predicate != NO_ROW), EVERY_ROW)
+    if deciding == EVERY_ROW:
+        decide(decisions)
 
 
 def AuthorizeRouteStep(

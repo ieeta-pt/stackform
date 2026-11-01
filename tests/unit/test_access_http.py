@@ -207,6 +207,21 @@ controllers:
         access:
           - given: { principal: "identity:user", parent: posts by postId }
             when: parent.ownerId equals principal.sub
+  protected:
+    base_path: /protected
+    routes:
+      delete:
+        service: posts
+        method: DELETE
+        path: /{id}
+        access:
+          - given: { document: posts }
+            when: document.title equals 'XX'
+            then: deny
+            reason: XX is protected.
+          - given: { principal: "identity:user" }
+            when: principal.sub equals 'nobody'
+            reason: Only nobody may delete posts.
   drafts:
     base_path: /drafts
     routes:
@@ -389,6 +404,20 @@ def test_is_not_null_denies_set_values_with_the_rule_reason(client, accounts):
     response = _get(client, accounts, "/api/posts", **ARCHIVED)
 
     assert (response.status_code, response.json()["detail"]) == (403, "Archived posts are hidden.")
+
+
+@pytest.mark.parametrize(
+    ("title", "reason"),
+    [("XX", "XX is protected."), ("YY", "Only nobody may delete posts.")],
+    ids=["document-deny-first", "no-rule-matches"],
+)
+def test_first_matching_rule_decides_the_refusal_reason(client, accounts, title, reason):
+    basic = accounts["ann@x.io"][0]
+    post = client.post("/api/posts", json={"title": title}, auth=basic).json()
+
+    response = client.delete(f"/api/protected/{post['id']}", auth=basic)
+
+    assert (response.status_code, response.json()["detail"]) == (403, reason)
 
 
 def test_policy_row_filter_lists_only_the_rows_it_admits(client, accounts):

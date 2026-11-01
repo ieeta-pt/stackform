@@ -58,7 +58,7 @@ shell, and registers a route at the view's `path`.
 ## The `crud` composite
 
 `component: crud` is the high-level way to wire a full resource UI. One view
-generates three page files and four routes:
+generates four page files and four routes:
 
 ```yaml
 ui:
@@ -77,7 +77,8 @@ ui:
 Generated for the view above:
 
 - Page files: `MyCollection.tsx` (list), `MyCollectionForm.tsx` (create/edit),
-  `MyCollectionDetail.tsx` (single record).
+  `MyCollectionDetail.tsx` (single record), `MyCollectionDelete.tsx` (the Delete
+  button and its dialog, shown on the detail page).
 - Routes: `/my-collection` (list), `/my-collection/new` (create form),
   `/my-collection/:id` (detail), `/my-collection/:id/edit` (edit form).
 
@@ -90,7 +91,7 @@ The `:id`, `/new`, and `/:id/edit` routes are operation-gated: each one is emitt
 only if the collection's backing repository exposes the corresponding CRUD
 operation. With `crud: [list, get]` on the repository, the create form (`/new`),
 edit form (`/:id/edit`), and their New/Edit buttons are all omitted, and the page
-becomes read-only. See [Operation-gated UI actions](operation-gating.md) and
+becomes read-only. See [Operation and role gating](operation-gating.md) and
 [Composable per-operation CRUD](../repositories/composable-crud.md).
 
 ## `field_roles`

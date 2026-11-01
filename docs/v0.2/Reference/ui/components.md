@@ -69,6 +69,38 @@ The `generic` pack provides kebab-case components, grouped by role. Common ones:
 Names such as `Card`, `Button`, `Badge`, and `Input` are internal scaffold
 primitives, not components you reference here. Use the kebab-case names above.
 
+### Generic pack props
+
+Each component accepts only the props it declares, typed as declared; any other
+key fails schema validation. Props of type `function` are callbacks the generated
+page wires itself and cannot be set in a spec.
+
+| Component | Prop | Effect |
+|-----------|------|--------|
+| `list-table`, `table` | `columns` | Fields shown as columns, in order (default: the first four by `field_roles`) |
+| | `searchable` | Search box filtering the listed rows |
+| | `sortable` | Clickable column headers that sort the rows |
+| | `pagination` | Page the rows instead of listing them all |
+| | `selectable` | Row checkboxes and a count of the selected rows |
+| `list-card-grid` | `columns` | Number of cards per row |
+| | `searchable` | Search box filtering the cards |
+| `list-grouped` | `collapsible` | Group headers that fold their rows |
+| `list-spreadsheet` | `inline_edit` | Cells editable in place through the update operation |
+| `detail-article` | `public` | Fetch the record without the session token |
+| `form-sectioned` | `sections` | `[{ title, fields }]` groups replacing the default sections |
+| `empty-centered` | `message`, `action_label` | Text and create-button label of the empty state |
+| `empty-import` | `options` | Which of `create`, `import`, `sample` are offered |
+| `empty-filtered` | `message` | Text of the empty filtered state |
+| `delete-type-confirm` | `confirm_text` | Text the user types to confirm (default: the entity name) |
+| `toast-undo` | `message`, `duration` | Toast text and seconds before it closes |
+| `filter-toolbar` | `active_filters` | Filters applied when the page opens, as `{ field: value }` |
+| `command-palette` | `collections` | Further collections whose records the palette searches |
+| `bulk-floating`, `bulk-toolbar`, `context-menu` | `actions` | Which selection actions are offered |
+| `bulk-progress` | `action` | Label of the bulk deletion |
+| `settings-sectioned` | `sections` | Which settings sections are shown |
+| `auth-hero-split` | `providers` | Which external providers get a sign-in button (default: all served) |
+| `crud` | `list`, `form`, `detail`, `delete` | The component filling each slot (see [UI Views](views)) |
+
 ## Prop values
 
 A prop value is interpreted by its shape:

@@ -104,12 +104,14 @@ def rule_to_predicate(rule: AccessRuleDescriptor) -> str:
     return f"all_of({', '.join(conditions)})"
 
 
+def sorted_set_py(values: set[str]) -> str:
+    return "{" + ", ".join(map(repr, sorted(values))) + "}" if values else "set()"
+
+
 def role_hierarchies_py(hierarchies: dict[str, dict[str, set[str]]]) -> str:
-    if not hierarchies:
-        return "{}"
     collections = ", ".join(
         f"{collection!r}: {{"
-        + ", ".join(f"{role!r}: {set(included)!r}" for role, included in roles.items())
+        + ", ".join(f"{role!r}: {sorted_set_py(included)}" for role, included in roles.items())
         + "}"
         for collection, roles in hierarchies.items()
     )

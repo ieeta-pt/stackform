@@ -13,7 +13,9 @@ pydantic-settings
 {% if uses_mongo %}pymongo
 {% endif %}
 {% if uses_sql %}sqlalchemy[asyncio]
-asyncpg
+{% for driver in ctx.sql_requirements %}
+{{ driver }}
+{% endfor %}
 sqlglot
 {% endif %}
 pyjwt[crypto]

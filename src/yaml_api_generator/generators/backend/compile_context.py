@@ -35,6 +35,8 @@ from ...utils.strings import to_pascal_case, to_py_identifier
 
 FILE_REQUIREMENTS = ("python-multipart", "puremagic", "anyio")
 SAML_REQUIREMENTS = ("python3-saml", "python-multipart")
+# The async driver a SQLAlchemy URL names after its dialect; its package carries the same name.
+SQL_DSN_DRIVER = re.compile(r"\w\+(\w+)://")
 
 
 @dataclass(frozen=True)
@@ -496,6 +498,11 @@ class CompileContext:
     @property
     def datastore_types(self) -> set[str]:
         return {ds["type"] for ds in self.datastores.values()}
+
+    @property
+    def sql_requirements(self) -> tuple[str, ...]:
+        drivers = (SQL_DSN_DRIVER.search(ds.get("dsn", "")) for ds in self.datastores.values())
+        return tuple(sorted({match[1] for match in drivers if match}))
 
     @property
     def mongo_unique_indexes(self) -> dict[str, dict[str, Any]]:

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from jinja2 import Environment
 
+from yaml_api_generator.constants import CRUD_OPERATIONS
 from yaml_api_generator.generators.backend.compile_context import CompileContext
 from yaml_api_generator.generators.backend.builders.settings_builder import build_settings_fields
 from yaml_api_generator.utils.strings import to_pascal_case, to_py_identifier
@@ -37,16 +38,16 @@ _BACKEND_GENERATORS = Path(__file__).parent.parent
 _TEMPLATES_DIR = _BACKEND_GENERATORS / "fastapi" / "templates"
 _SHARED_TEMPLATES_DIR = _BACKEND_GENERATORS / "shared" / "templates"
 _STATIC_DIR = _BACKEND_GENERATORS / "fastapi" / "static"
-_CRUD_ORDER = ("list", "get", "create", "update", "replace", "delete")
+_MIXIN_OPERATIONS = ("list", "create", "update", "replace", "delete")
 
 
-def _crud_operations(col_data: dict) -> list[str]:
-    present = {
-        route.operation
-        for route in col_data["routes"]
-        if route.handler is None and route.operation in _CRUD_ORDER
-    }
-    return [op for op in _CRUD_ORDER if op in present]
+def _mixins(operations: tuple[str, ...]) -> list[str]:
+    """The CRUD operations a service or repository class composes as mixins.
+
+    Reading one record is every class's own: each route that acts on a record
+    reads it first, whichever operations its service offers.
+    """
+    return [operation for operation in _MIXIN_OPERATIONS if operation in operations]
 
 
 class FastAPIGenerator(TemplateBasedGenerator):
@@ -187,7 +188,7 @@ class FastAPIGenerator(TemplateBasedGenerator):
         base = context.service_base(col_name)
         return {
             "collection_name": col_name,
-            "operations": _crud_operations(col_data),
+            "operations": _mixins(context.service_crud(col_name)),
             "custom_operations": own_service_operations(route_operations(col_data), base),
             "generated_base": service_base_class(base),
             **identity_service_context(context, col_name),
@@ -350,7 +351,7 @@ class FastAPIGenerator(TemplateBasedGenerator):
             is_sql = meta.get("datastore_type") in ("postgres", "postgresql")
             template_context = {
                 "collection_name": col_name,
-                "operations": _crud_operations(col_data),
+                "operations": _mixins(context.repository_crud.get(col_name, CRUD_OPERATIONS)),
                 "id_field": meta["id_field"],
                 "id_field_format": meta["id_format"],
                 "collection_type": meta["type"],

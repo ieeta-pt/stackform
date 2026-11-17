@@ -128,6 +128,9 @@ class RepositoryBase:
     async def find_one(self, criteria: dict[str, Any]) -> dict[str, Any] | None:
         return self._normalize(await self._col.find_one(self._lifecycle.visible(criteria)))
 
+    async def get(self, document_id: str) -> dict[str, Any] | None:
+        return await self.find_one(self._match_filter(document_id))
+
     @_translate_conflict
     async def update_by(
         self, criteria: dict[str, Any], data: dict[str, Any]
@@ -207,11 +210,6 @@ class ListOp:
             else None
         )
         return Page([self._normalize(document) for document in documents], total)
-
-
-class GetOp:
-    async def get(self, document_id: str) -> dict[str, Any] | None:
-        return await self.find_one(self._match_filter(document_id))
 
 
 class CreateOp:

@@ -68,6 +68,9 @@ Common codes:
 - `DESUGAR_ABSTRACT_REPOSITORY_BOUND` / `DESUGAR_ABSTRACT_SERVICE_BOUND` -- a service or
   controller binds an abstract repository or service; bind a concrete one that extends it.
 - `DESUGAR_SERVICE_NOT_FOUND` -- a controller or route references an undefined service.
+- `SERVICE_OPERATION_DISABLED` -- an explicit route runs a CRUD operation its service
+  group turns off. Enable the operation under the service's `operations`, or remove the
+  route.
 - `REPOSITORY_OPERATION_UNDECLARED` -- a route calls an operation that no handler
   implements and the repository does not provide. Declare it under the repository's
   `operations`, list it in `crud`, or give the service a handler.

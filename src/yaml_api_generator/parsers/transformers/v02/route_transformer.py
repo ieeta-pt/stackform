@@ -209,15 +209,11 @@ class RouteTransformer:
 
                 svc_name = route_cfg["service"]
                 full_path = base_path + ctrl_base + route_cfg["path"]
-                service = self._resolve_service(svc_name, route_name, services)
-                if service is None:
-                    all_errors.append(
-                        ConfigError(
-                            code="DESUGAR_SERVICE_NOT_FOUND",
-                            message=f"Service '{svc_name}' referenced by route is not defined",
-                            path=f"controllers.{ctrl_name}.routes.{route_name}.service",
-                        )
-                    )
+                route_path = f"controllers.{ctrl_name}.routes.{route_name}"
+                try:
+                    service = self._resolve_service(svc_name, route_name, services, repositories, route_path)
+                except ConfigError as error:
+                    all_errors.append(error)
                     continue
 
                 is_public, access_rules, access_errors = self._access_transformer.parse_access(
@@ -233,7 +229,6 @@ class RouteTransformer:
                 repository = repositories.get(collection)
                 declared = repository.operations.get(operation) if repository else None
                 handler = service.handler or (declared.handler if declared else None)
-                route_path = f"controllers.{ctrl_name}.routes.{route_name}"
                 if handler is None and not _provides(repository, operation, declared):
                     all_errors.append(_undeclared_operation(route_path, collection, operation))
                     continue
@@ -270,32 +265,48 @@ class RouteTransformer:
         return routes
 
     def _resolve_service(
-        self, svc_name: str, route_name: str, services: dict[str, IRService]
-    ) -> IRService | None:
+        self,
+        svc_name: str,
+        route_name: str,
+        services: dict[str, IRService],
+        repositories: dict[str, IRRepository],
+        route_path: str,
+    ) -> IRService:
         """Resolve a route's service reference to its IRService.
 
         Handles both the minified controller form (where the reference is an
         already-expanded flat key like 'list-posts') and the explicit routes
         form (where the reference is the service group 'posts' and the route
         name is the operation). For the explicit form, CRUD operations resolve
-        to their flat key while custom operations inherit the group's
-        repository so the route is bound to a collection.
-        """
-        direct = services.get(svc_name)
-        if direct is not None:
-            return direct
+        to their flat key, so a group runs only the CRUD operations it offers,
+        while custom operations inherit the group's repository so the route is
+        bound to a collection. A CRUD operation the repository itself lacks is
+        left for the repository check to report.
 
+        Raises:
+            ConfigError: If the reference names no service, or a group that
+                disables a CRUD operation its repository provides
+        """
         flat_key = f"{route_name}-{svc_name}"
-        crud = services.get(flat_key)
-        if crud is not None:
-            return crud
+        service = services.get(svc_name) or services.get(flat_key)
+        if service is not None:
+            return service
 
         repository = self._group_repository(svc_name, services)
         if repository is None:
-            return None
-        return IRService(
-            name=flat_key, repository=repository, operation=route_name
-        )
+            raise ConfigError(
+                code="DESUGAR_SERVICE_NOT_FOUND",
+                message=f"Service '{svc_name}' referenced by route is not defined",
+                path=f"{route_path}.service",
+            )
+        if route_name in CRUD_OPERATIONS and _provides(repositories.get(repository), route_name, None):
+            raise ConfigError(
+                code="SERVICE_OPERATION_DISABLED",
+                message=f"Route runs '{route_name}', which service '{svc_name}' does not offer",
+                path=f"{route_path}.service",
+                hint=f"Enable '{route_name}' on service '{svc_name}', or remove the route",
+            )
+        return IRService(name=flat_key, repository=repository, operation=route_name)
 
     def _group_repository(
         self, svc_name: str, services: dict[str, IRService]

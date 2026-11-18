@@ -21,6 +21,20 @@ class ServiceBase:
         for field_name in ("_auth", "password", "apiKey"):
             document.pop(field_name, None)
 
+    async def get(self, resource_id: str) -> dict:
+        document = await self._repo.get(resource_id)
+        if document is None:
+            raise NotFoundError(self._name, resource_id)
+        await self._after_get(document)
+        return document
+
+    async def get_by(self, criteria: dict[str, Any]) -> dict:
+        document = await self._repo.find_one(criteria)
+        if document is None:
+            raise NotFoundError(self._name, criteria)
+        await self._after_get(document)
+        return document
+
     async def _before_create(self, data: dict) -> None:
         """Hook invoked before create; override to validate or enrich data."""
 
@@ -65,22 +79,6 @@ class ListSvc:
         page = await self._repo.paginate(primitives, predicate)
         await self._after_list(page.rows)
         return page
-
-
-class GetSvc:
-    async def get(self, resource_id: str) -> dict:
-        document = await self._repo.get(resource_id)
-        if document is None:
-            raise NotFoundError(self._name, resource_id)
-        await self._after_get(document)
-        return document
-
-    async def get_by(self, criteria: dict[str, Any]) -> dict:
-        document = await self._repo.find_one(criteria)
-        if document is None:
-            raise NotFoundError(self._name, criteria)
-        await self._after_get(document)
-        return document
 
 
 class CreateSvc:

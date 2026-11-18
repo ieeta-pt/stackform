@@ -461,6 +461,8 @@ class CompileContext:
     repository_abstract: dict[str, str] = field(default_factory=dict)
     # Concrete repo (collection) name -> abstract base repo name it inherits.
     repository_inherits: dict[str, str] = field(default_factory=dict)
+    # Concrete repo (collection) name -> the CRUD operations it provides.
+    repository_crud: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # IR services keyed by their expanded flat name (e.g. "list-posts").
     services: dict[str, IRService] = field(default_factory=dict)
     service_bases: dict[str, IRServiceBase] = field(default_factory=dict)
@@ -523,6 +525,15 @@ class CompileContext:
 
     def collection_datastore_type(self, collection: str) -> str:
         return self.collections.get(collection, {}).get("datastore_type", "mongodb")
+
+    def service_crud(self, repository: str) -> tuple[str, ...]:
+        """The CRUD operations the services backed by ``repository`` offer, in canonical order."""
+        offered = {
+            service.operation
+            for service in self.services.values()
+            if service.repository == repository and service.handler is None
+        }
+        return tuple(operation for operation in CRUD_OPERATIONS if operation in offered)
 
     def service_base(self, repository: str) -> IRServiceBase | None:
         """The abstract service that the services of ``repository`` extend."""

@@ -111,6 +111,11 @@ class ContextBuilder:
             for repo in document.repositories.values()
             if repo.inherits
         }
+        repository_crud = {
+            repo.name: repo.crud
+            for repo in document.repositories.values()
+            if not repo.abstract
+        }
 
         return CompileContext(
             app=app,
@@ -128,6 +133,7 @@ class ContextBuilder:
             datastores=datastores,
             repository_abstract=repository_abstract,
             repository_inherits=repository_inherits,
+            repository_crud=repository_crud,
             services=dict(document.services),
             service_bases=dict(document.service_bases),
             dto_models=dto_models,
